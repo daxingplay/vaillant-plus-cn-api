@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "vaillant-plus-cn-api"
+version = "0.1.0"
+description = ""
+authors = ["daxingplay <daxingplay@gmail.com>"]
+readme = "README.md"
+packages = [{include = "vaillant_plus_cn_api"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+aiohttp = "^3.8.3"
+aiodns = "^3.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^6.0.0"
+aresponses = "^2.1.6"
+pytest = "^7.2.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
