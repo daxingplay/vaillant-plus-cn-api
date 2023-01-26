@@ -16,6 +16,16 @@ aiodns = "^3.0.0"
 flake8 = "^6.0.0"
 aresponses = "^2.1.6"
 pytest = "^7.2.1"
+pytest-cov = "^4.0.0"
+
+[tool.coverage.report]
+exclude_lines = ["raise NotImplementedError", "TYPE_CHECKING", "@overload"]
+fail_under = 85
+show_missing = true
+
+[tool.coverage.run]
+branch = true
+source = ["vaillant_plus_cn_api"]
 
 [build-system]
 requires = ["poetry-core"]
