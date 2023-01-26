@@ -8,7 +8,7 @@ from aresponses import ResponsesMockServer
 from vaillant_plus_cn_api import VaillantApiClient
 from vaillant_plus_cn_api.const import HOST_APP, HOST_API
 from vaillant_plus_cn_api.errors import InvalidAuthError, RequestError
-from .common import TEST_USERNAME, TEST_PASSWORD
+from .conftest import TEST_USERNAME, TEST_PASSWORD
 
 
 @pytest.mark.asyncio
@@ -177,6 +177,7 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
         assert devices[0].product_key == "abcdefg"
         assert devices[0].host == "test_host"
         assert devices[0].wss_port == 8
+        assert devices[0].ws_port == 9
         assert devices[0].wifi_soft_version == "wsv1"
         assert devices[0].wifi_hard_version == ""
         assert devices[0].mcu_soft_version == ""
