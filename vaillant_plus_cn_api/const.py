@@ -18,6 +18,8 @@ STATE_SUBSCRIBED = "subscribed"
 STATE_STOPPED = "stopped"
 STATE_DISCONNECTED = "disconnected"
 
+EVT_DEVICE_ATTR_UPDATE = "device:attr:update"
+
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_TOKEN = "token"

@@ -19,6 +19,7 @@ class Device:
     product_key: str
     product_name: str
     host: str
+    ws_port: int
     wss_port: int
     wifi_soft_version: str
     wifi_hard_version: str

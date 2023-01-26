@@ -9,7 +9,7 @@ from typing import Any
 
 import aiohttp
 
-from .const import DEFAULT_API_VERSION, APP_ID, LOGGER, DEFAULT_USER_AGENT, STATE_CONNECTING, STATE_STOPPED, STATE_CONNECTED, STATE_SUBSCRIBED, STATE_DISCONNECTED
+from .const import DEFAULT_API_VERSION, APP_ID, LOGGER, DEFAULT_USER_AGENT, STATE_CONNECTING, STATE_STOPPED, STATE_CONNECTED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
 from .errors import WebsocketError, InvalidAuthError, WebsocketServerClosedConnectionError
 from .model import Token, Device
 
@@ -76,8 +76,10 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         api_version: str = DEFAULT_API_VERSION,
         logger: logging.Logger = LOGGER,
         session: aiohttp.ClientSession | None = None,
+        use_ssl: bool = True,
         verify_ssl: bool = True,
         max_retry_attemps: int | None = None,
+        heartbeat_interval: int = DEFAULT_WATCHDOG_TIMEOUT,
     ) -> None:
         """Initialize.
 
@@ -89,18 +91,19 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         """
 
         self._session: aiohttp.ClientSession = session or aiohttp.ClientSession()
+        self._use_ssl = use_ssl
         self._verify_ssl = verify_ssl
         self._token = token
         self._device = device
         self._application_id = application_id
         self._api_version = api_version
-        self._async_user_connect_handler: Callable[...,
-                                                   Awaitable[None]] | None = None
+        self._async_on_subscribe_handler: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        self._async_on_update_handler: Callable[..., Awaitable[None]] | None = None
         self._logger = logger
         self._max_retry_attemps = max_retry_attemps
         self._state = None
         # self._ws_client = None
-        self._watchdog = WebsocketWatchdog(logger, self.ping)
+        self._watchdog = WebsocketWatchdog(logger, self.ping, timeout_seconds=heartbeat_interval)
 
     @property
     def state(self):
@@ -110,23 +113,26 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
     async def connect(self) -> None:
         self._state = STATE_CONNECTING
 
+        endpoint = f"ws://{self._device.host}:{self._device.ws_port}"
+        if self._use_ssl:
+            endpoint = f"wss://{self._device.host}:{self._device.wss_port}"
+
         try:
             async with self._session.ws_connect(
-                f"wss://{self._device.host}:{self._device.wss_port}/ws/app/v1",
+                f"{endpoint}/ws/app/v1",
                 verify_ssl=self._verify_ssl,
                 headers={
                     "User-Agent": DEFAULT_USER_AGENT,
                 },
             ) as ws_client:
                 self._ws_client = ws_client
-                self._failed_attempts = 0
 
                 await ws_client.send_json({
                     "cmd": "login_req",
                     "data": {
                         "appid": self._token.app_id or self._application_id,
                         "uid": self._token.uid,
-                        "token": self._token,
+                        "token": self._token.token,
                         "p0_type": "attrs_v4",
                         "heartbeat_interval": 180,
                         "auto_subscribe": False,
@@ -144,6 +150,8 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
                 self._state = STATE_CONNECTED
 
+                await self._watchdog.trigger()
+
                 async for message in ws_client:
                     if self.state == STATE_STOPPED:
                         break
@@ -153,40 +161,51 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                         cmd = msg["cmd"]
                         data = msg["data"]
 
-                        self._logger.debug("Recv: %s", msg)
+                        self._logger.debug("Recv: %s", message)
 
                         if cmd == "s2c_noti":
                             if data["did"] == self._device.id:
                                 device_attrs = data["attrs"]
-                                self._logger.debug("Recv atrrs for device %s => %s", data["did"], device_attrs)
+                                self._logger.debug(
+                                    "Recv atrrs for device %s => %s", data["did"], device_attrs)
                                 if self.state != STATE_SUBSCRIBED:
-                                    # TODO trigger subscribe event
+                                    if self._async_on_subscribe_handler is not None:
+                                        await self._async_on_subscribe_handler(device_attrs)
                                     self._state = STATE_SUBSCRIBED
-                                # TODO trigger device attr update event
+                                
+                                if self._async_on_update_handler is not None:
+                                    await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
                         elif cmd == "pong":
                             await self._watchdog.trigger()
                         elif cmd == "s2c_invalid_msg":
+                            self._logger.error("Server pushed an error msg: %s", message)
                             error_code = data["error_code"]
-                            if error_code == 1009:
+                            # {'cmd': 's2c_invalid_msg', 'data': {'error_code': 1009, 'msg': 'M2M socket has closed, please login again!'}}
+                            # {'cmd': 's2c_invalid_msg', 'data': {'error_code': 1011, 'msg': 'No heartbeat!'}}
+                            if error_code == 1009 or error_code == 1011:
                                 raise WebsocketServerClosedConnectionError
                         else:
                             self._logger.info("Unhandled msg: %s", msg)
 
                     elif message.type == aiohttp.WSMsgType.CLOSED:
-                        self._logger.warning("AIOHTTP websocket connection closed")
+                        self._logger.warning(
+                            "AIOHTTP websocket connection closed")
                         break
 
                     elif message.type == aiohttp.WSMsgType.ERROR:
                         self._logger.error("AIOHTTP websocket error")
                         break
 
+        except InvalidAuthError as error:
+            self._state = STATE_STOPPED
+            raise InvalidAuthError
         except aiohttp.ClientResponseError as error:
             if error.code == 401:
                 self._logger.error("Credentials rejected: %s", error)
             else:
                 self._logger.error("Unexpected response received: %s", error)
             self._state = STATE_STOPPED
-        except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as error:
+        except (aiohttp.ClientConnectionError, asyncio.TimeoutError, WebsocketServerClosedConnectionError) as error:
             if self._max_retry_attemps is not None and self._failed_attempts >= self._max_retry_attemps:
                 self._logger.error("Too many retry attemps. exit.")
                 self._state = STATE_STOPPED
@@ -202,7 +221,8 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                 await asyncio.sleep(retry_delay)
         except Exception as error:  # pylint: disable=broad-except
             if self.state != STATE_STOPPED:
-                self._logger.exception("Unexpected exception occurred: %s", error)
+                self._logger.exception(
+                    "Unexpected exception occurred: %s", error)
                 self._state = STATE_STOPPED
         else:
             if self.state != STATE_STOPPED:
@@ -215,10 +235,14 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         while self.state != STATE_STOPPED:
             await self.connect()
 
-    def close(self):
+    async def close(self):
         """Close the listening websocket."""
         self._state = STATE_STOPPED
         self._watchdog.cancel()
+        try:
+            await self._ws_client.close()
+        except Exception as error:
+            self._logger.warn("Close websocket error: %s", error)
 
     async def ping(self) -> None:
         """Send ping to server."""
@@ -234,3 +258,8 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
             await self._ws_client.send_json(msg)
 
+    def async_on_subscribe(self, handler: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+        self._async_on_subscribe_handler = handler
+
+    def async_on_update(self, handler: Callable[..., Awaitable[None]]) -> None:
+        self._async_on_update_handler = handler

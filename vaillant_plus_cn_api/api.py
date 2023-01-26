@@ -140,6 +140,7 @@ class VaillantApiClient:
                 product_key=d.get("product_key"),
                 product_name=d.get("product_name"),
                 host=d.get("host"),
+                ws_port=d.get("ws_port"),
                 wss_port=d.get("wss_port"),
                 wifi_soft_version=d.get("wifi_soft_version", ""),
                 wifi_hard_version=d.get("wifi_hard_version", ""),
