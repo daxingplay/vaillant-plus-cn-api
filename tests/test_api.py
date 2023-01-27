@@ -10,6 +10,42 @@ from vaillant_plus_cn_api.const import HOST_APP, HOST_API
 from vaillant_plus_cn_api.errors import InvalidAuthError, RequestError
 from .conftest import TEST_USERNAME, TEST_PASSWORD
 
+@pytest.mark.asyncio
+async def test_api_session() -> None:
+    """Test the API client automatically create a new session when session arg is None.
+    """
+    api = VaillantApiClient()
+    assert api._session is not None
+
+@pytest.mark.asyncio
+async def test_api_request_session(aresponses: ResponsesMockServer) -> None:
+    """Test the API client automatically create a new session if old session closed.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        HOST_APP.removeprefix("https://"),
+        "/app/user/login",
+        "post",
+        aresponses.Response(
+            text=json.dumps({
+                "code": "200",
+                "data": {
+                    "token": "123",
+                    "uid": "1"
+                }
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    api = VaillantApiClient()
+    await api._session.close()
+    await api.login(TEST_USERNAME, TEST_PASSWORD)
+    assert api._session is not None
+    assert api._session.closed is True
 
 @pytest.mark.asyncio
 async def test_api_request_error(aresponses: ResponsesMockServer) -> None:
@@ -125,6 +161,33 @@ async def test_api_get_device_list_error(aresponses: ResponsesMockServer) -> Non
         with pytest.raises(InvalidAuthError):
             await api.get_device_list("1")
 
+@pytest.mark.asyncio
+async def test_api_get_device_list_request_error(aresponses: ResponsesMockServer) -> None:
+    """Test the API client raise an auth error when using an invalid token to get device list.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        HOST_API.removeprefix("https://"),
+        "/app/bindings",
+        "get",
+        aresponses.Response(
+            text=json.dumps({
+                "error_message": "token invalid!",
+                "error_code": 9004,
+                "detail_message": None,
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        with pytest.raises(RequestError):
+            await api.get_device_list("1")
 
 @pytest.mark.asyncio
 async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
@@ -254,4 +317,33 @@ async def test_api_get_device_info_auth_error(aresponses: ResponsesMockServer) -
         api = VaillantApiClient(session=session)
 
         with pytest.raises(InvalidAuthError):
+            await api.get_device_info("1", "12345678abcd")
+
+@pytest.mark.asyncio
+async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer) -> None:
+    """Test the API client raise an auth error when getting device info.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        HOST_APP.removeprefix("https://"),
+        "/app/device/sn/status",
+        "get",
+        aresponses.Response(
+            text=json.dumps({
+                "code": "11111111",
+                "message": "Unknown code",
+                "data": None,
+                "display": None
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        with pytest.raises(RequestError):
             await api.get_device_info("1", "12345678abcd")

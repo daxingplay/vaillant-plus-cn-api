@@ -132,7 +132,7 @@ class VaillantApiClient:
             headers=headers,
         )
         if resp.get("error_code") is not None:
-            raise InvalidAuthError
+            raise RequestError
         return [
             Device(
                 id=d.get("did"),

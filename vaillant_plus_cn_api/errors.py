@@ -12,6 +12,11 @@ class RequestError(VaillantError):
 
     pass
 
+class InvalidCredentialsError(VaillantError):
+    """Define an error related to login issues.
+       This error is only used internally.
+    """
+    pass
 
 class InvalidAuthError(VaillantError):
     """Define an error related to login issues."""
