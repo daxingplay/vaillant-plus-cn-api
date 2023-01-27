@@ -5,6 +5,7 @@ description = ""
 authors = ["daxingplay <daxingplay@gmail.com>"]
 readme = "README.md"
 packages = [{include = "vaillant_plus_cn_api"}]
+homepage = "https://github.com/daxingplay/vaillant-plus-cn-api"
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -30,6 +31,3 @@ source = ["vaillant_plus_cn_api"]
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[project.urls]
-Homepage = "https://github.com/daxingplay/vaillant-plus-cn-api"
