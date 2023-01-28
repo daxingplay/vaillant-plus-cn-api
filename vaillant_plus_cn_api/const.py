@@ -9,7 +9,7 @@ DEFAULT_API_VERSION = "1.3"
 HOST_APP = "https://appapi.vaillant.com.cn"
 HOST_API = "https://api.vaillant.com.cn"
 
-APP_ID = str(base64.b64decode("MWY1YjkzNzNmZTk2NGYyNTgxYjBhM2EzZTI2MzYxZTY="))
+APP_ID = base64.b64decode("MWY1YjkzNzNmZTk2NGYyNTgxYjBhM2EzZTI2MzYxZTY=").decode("ascii")
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 7.1.2; Redmi 4X Build/N2G47H; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36"
 
 STATE_CONNECTING = "connecting"

@@ -1,7 +1,7 @@
 """Define API client to interact with the Vaillant API."""
 from __future__ import annotations
 
-import asyncio
+import json
 import logging
 from datetime import date
 from typing import Any, cast
@@ -9,7 +9,14 @@ from typing import Any, cast
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientError
 
-from .const import DEFAULT_API_VERSION, LOGGER, HOST_API, HOST_APP, APP_ID, DEFAULT_USER_AGENT
+from .const import (
+    DEFAULT_API_VERSION,
+    LOGGER,
+    HOST_API,
+    HOST_APP,
+    APP_ID,
+    DEFAULT_USER_AGENT,
+)
 from .errors import RequestError, InvalidAuthError, RequestError
 from .model import Token, Device
 
@@ -80,7 +87,11 @@ class VaillantApiClient:
                 if 399 < resp.status and 500 > resp.status:
                     raise InvalidAuthError
                 elif 200 == resp.status:
-                    data = await resp.json()
+                    if resp.content_type.startswith("text/html"):
+                        data = await resp.text()
+                        data = json.loads(data)
+                    else:
+                        data = await resp.json()
                 else:
                     resp.raise_for_status()
         except ClientError as err:
@@ -107,7 +118,8 @@ class VaillantApiClient:
             "Origin": "http://localhost",
         }
         resp = await self._request(
-            "post", f"{HOST_APP}/app/user/login", json=data, headers=headers)
+            "post", f"{HOST_APP}/app/user/login", json=data, headers=headers
+        )
         if resp is None or resp["code"] != "200" or resp["data"] is None:
             raise InvalidAuthError
 
@@ -127,7 +139,7 @@ class VaillantApiClient:
             "X-Gizwits-User-token": token,
         }
         resp = await self._request(
-          "get",
+            "get",
             f"{HOST_API}/app/bindings?show_disabled=0&limit=20&skip=0",
             headers=headers,
         )
@@ -163,7 +175,7 @@ class VaillantApiClient:
         }
         upper_mac = str.upper(mac_addr)
         resp = await self._request(
-          "get",
+            "get",
             f"{HOST_APP}/app/device/sn/status?mac={upper_mac}",
             headers=headers,
         )
