@@ -225,7 +225,7 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
                     }
                 ]
             }),
-            content_type="application/json",
+            content_type="text/html",
             status=200,
         ),
     )
