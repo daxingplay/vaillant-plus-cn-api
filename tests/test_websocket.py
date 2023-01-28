@@ -262,7 +262,7 @@ async def test_websocket_push_device_data(websocket_server: FakeWebsocketServer)
 
 
 @pytest.mark.asyncio
-async def test_websocket_events(websocket_server: FakeWebsocketServer) -> None:
+async def test_websocket_async_events(websocket_server: FakeWebsocketServer) -> None:
     """Test the client can trigger events.
     """
 
@@ -325,7 +325,70 @@ async def test_websocket_events(websocket_server: FakeWebsocketServer) -> None:
         on_update_old.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_websocket_subscribed_event(websocket_server: FakeWebsocketServer) -> None:
+async def test_websocket_events(websocket_server: FakeWebsocketServer) -> None:
+    """Test the client can trigger events.
+    """
+
+    async with aiohttp.ClientSession() as session:
+
+        client = get_client(websocket_server, session)
+
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("cmd", "")
+            if cmd == "login_req":
+                await ws.send_json({
+                    "cmd": "login_res",
+                    "data": {
+                        "success": True
+                    }
+                })
+            elif cmd == "c2s_read":
+                await asyncio.sleep(0.3)
+                await ws.send_json({
+                    "cmd": "s2c_noti",
+                    "data": {
+                        "did": "1",
+                        "attrs": {
+                            "attr1": "test_attr1_v1",
+                            "ATTR2": "test_attr2_v2",
+                            "Attr_3": "test_attr3_v3"
+                        }
+                    }
+                })
+                await asyncio.sleep(0.3)
+                await client.close()
+                await ws.close()
+
+        websocket_server.add_handler(message_handler)
+
+        on_subscribe = MagicMock()
+        on_update_old = MagicMock()
+        on_update = MagicMock()
+
+        client.on_subscribe(on_subscribe)
+        client.on_update(on_update_old)
+        client.on_update(on_update)
+
+        await client.listen()
+
+        on_subscribe.assert_called_once_with({
+            "attr1": "test_attr1_v1",
+            "ATTR2": "test_attr2_v2",
+            "Attr_3": "test_attr3_v3"
+        })
+
+        on_update.assert_called_once_with(EVT_DEVICE_ATTR_UPDATE, {
+            "data": {
+                "attr1": "test_attr1_v1",
+                "ATTR2": "test_attr2_v2",
+                "Attr_3": "test_attr3_v3"
+            }
+        })
+
+        on_update_old.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_websocket_async_subscribed_event(websocket_server: FakeWebsocketServer) -> None:
     """Test the client only trigger subscribe event once.
     """
 
@@ -388,6 +451,77 @@ async def test_websocket_subscribed_event(websocket_server: FakeWebsocketServer)
         })
 
         on_update.assert_awaited_with(EVT_DEVICE_ATTR_UPDATE, {
+            "data": {
+                "attr1": "test_attr1_v2",
+                "ATTR2": "test_attr2_v3",
+                "Attr_3": "test_attr3_v4"
+            }
+        })
+
+@pytest.mark.asyncio
+async def test_websocket_subscribed_event(websocket_server: FakeWebsocketServer) -> None:
+    """Test the client only trigger subscribe event once.
+    """
+
+    async with aiohttp.ClientSession() as session:
+
+        client = get_client(websocket_server, session)
+
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("cmd", "")
+            if cmd == "login_req":
+                await ws.send_json({
+                    "cmd": "login_res",
+                    "data": {
+                        "success": True
+                    }
+                })
+            elif cmd == "c2s_read":
+                await asyncio.sleep(0.3)
+                await ws.send_json({
+                    "cmd": "s2c_noti",
+                    "data": {
+                        "did": "1",
+                        "attrs": {
+                            "attr1": "test_attr1_v1",
+                            "ATTR2": "test_attr2_v2",
+                            "Attr_3": "test_attr3_v3"
+                        }
+                    }
+                })
+                await asyncio.sleep(0.3)
+                await ws.send_json({
+                    "cmd": "s2c_noti",
+                    "data": {
+                        "did": "1",
+                        "attrs": {
+                            "attr1": "test_attr1_v2",
+                            "ATTR2": "test_attr2_v3",
+                            "Attr_3": "test_attr3_v4"
+                        }
+                    }
+                })
+                await asyncio.sleep(0.3)
+                await client.close()
+                await ws.close()
+
+        websocket_server.add_handler(message_handler)
+
+        on_subscribe = MagicMock()
+        on_update = MagicMock()
+
+        client.on_subscribe(on_subscribe)
+        client.on_update(on_update)
+
+        await client.listen()
+
+        on_subscribe.assert_called_once_with({
+            "attr1": "test_attr1_v1",
+            "ATTR2": "test_attr2_v2",
+            "Attr_3": "test_attr3_v3"
+        })
+
+        on_update.assert_called_with(EVT_DEVICE_ATTR_UPDATE, {
             "data": {
                 "attr1": "test_attr1_v2",
                 "ATTR2": "test_attr2_v3",
