@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "vaillant-plus-cn-api"
-version = "0.1.0"
-description = ""
+version = "0.2.0"
+description = "Python package for interacting with Vaillant devices sold in China mainland using API"
 authors = ["daxingplay <daxingplay@gmail.com>"]
 readme = "README.md"
 packages = [{include = "vaillant_plus_cn_api"}]
 homepage = "https://github.com/daxingplay/vaillant-plus-cn-api"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.9"
 aiohttp = "^3.8.3"
 aiodns = "^3.0.0"
 
