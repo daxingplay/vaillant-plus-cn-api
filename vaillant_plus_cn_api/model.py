@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import json
+import base64
 
 from .const import APP_ID, CONF_USERNAME, CONF_PASSWORD, CONF_UID, CONF_TOKEN, CONF_APP_ID, CONF_DID, CONF_MAC
 
@@ -41,19 +42,20 @@ class Token:
     def serialize(self) -> str:
         """Serialize token object into a JSON string."""
 
-        return json.dumps({
+        s = json.dumps({
             f"{CONF_APP_ID}": self.app_id,
             f"{CONF_USERNAME}": self.username,
             f"{CONF_PASSWORD}": self.password,
             f"{CONF_TOKEN}": self.token,
             f"{CONF_UID}": self.uid,
         })
+        return base64.b64encode(s.encode("ascii")).decode("ascii")
 
     @classmethod
     def deserialize(cls, token: str) -> Token:
         """Deserialize JSON string into a token object."""
 
-        data = json.loads(token)
+        data = json.loads(base64.b64decode(token.encode("ascii")))
         return Token(
             app_id=data[CONF_APP_ID],
             username=data[CONF_USERNAME],

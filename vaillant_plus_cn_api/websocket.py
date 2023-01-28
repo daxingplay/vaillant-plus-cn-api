@@ -99,6 +99,8 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         self._api_version = api_version
         self._async_on_subscribe_handler: Callable[[dict[str, Any]], Awaitable[None]] | None = None
         self._async_on_update_handler: Callable[..., Awaitable[None]] | None = None
+        self._on_subscribe_handler: Callable[[dict[str, Any]], None] | None = None
+        self._on_update_handler: Callable[..., None] | None = None
         self._logger = logger
         self._max_retry_attemps = max_retry_attemps
         self._state = None
@@ -171,10 +173,14 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                                 if self.state != STATE_SUBSCRIBED:
                                     if self._async_on_subscribe_handler is not None:
                                         await self._async_on_subscribe_handler(device_attrs)
+                                    elif self._on_subscribe_handler is not None:
+                                        self._on_subscribe_handler(device_attrs)
                                     self._state = STATE_SUBSCRIBED
                                 
                                 if self._async_on_update_handler is not None:
                                     await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
+                                elif self._on_update_handler is not None:
+                                    self._on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
                         elif cmd == "pong":
                             await self._watchdog.trigger()
                         elif cmd == "s2c_invalid_msg":
@@ -265,3 +271,9 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
     def async_on_update(self, handler: Callable[..., Awaitable[None]]) -> None:
         self._async_on_update_handler = handler
+
+    def on_subscribe(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        self._on_subscribe_handler = handler
+
+    def on_update(self, handler: Callable[..., None]) -> None:
+        self._on_update_handler = handler
