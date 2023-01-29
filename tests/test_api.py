@@ -7,7 +7,7 @@ from aresponses import ResponsesMockServer
 
 from vaillant_plus_cn_api import VaillantApiClient
 from vaillant_plus_cn_api.const import HOST_APP, HOST_API
-from vaillant_plus_cn_api.errors import InvalidAuthError, RequestError
+from vaillant_plus_cn_api.errors import InvalidAuthError, RequestError, InvalidCredentialsError
 from .conftest import TEST_USERNAME, TEST_PASSWORD
 
 @pytest.mark.asyncio
@@ -95,7 +95,7 @@ async def test_api_invalid_auth_error(aresponses: ResponsesMockServer) -> None:
     async with aiohttp.ClientSession() as session:
         api = VaillantApiClient(session=session)
 
-        with pytest.raises(InvalidAuthError):
+        with pytest.raises(InvalidCredentialsError):
             await api.login(TEST_USERNAME, TEST_PASSWORD)
 
 

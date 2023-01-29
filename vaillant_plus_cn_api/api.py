@@ -17,7 +17,7 @@ from .const import (
     APP_ID,
     DEFAULT_USER_AGENT,
 )
-from .errors import RequestError, InvalidAuthError, RequestError
+from .errors import RequestError, InvalidAuthError, RequestError, InvalidCredentialsError
 from .model import Token, Device
 
 DEFAULT_LIMIT = 288
@@ -121,7 +121,7 @@ class VaillantApiClient:
             "post", f"{HOST_APP}/app/user/login", json=data, headers=headers
         )
         if resp is None or resp["code"] != "200" or resp["data"] is None:
-            raise InvalidAuthError
+            raise InvalidCredentialsError
 
         return Token(
             app_id=self._application_id,

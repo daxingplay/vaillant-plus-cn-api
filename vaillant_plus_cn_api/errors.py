@@ -12,14 +12,22 @@ class RequestError(VaillantError):
 
     pass
 
-class InvalidCredentialsError(VaillantError):
+class InvalidTokenError(VaillantError):
     """Define an error related to login issues.
        This error is only used internally.
     """
     pass
 
+class InvalidCredentialsError(VaillantError):
+    """Define an error related to wrong username and password combination.
+    """
+    pass
+
 class InvalidAuthError(VaillantError):
-    """Define an error related to login issues."""
+    """Define an error related to login issues. 
+       Usually means token expired.
+       Should try to re-login to retrieve a new token.
+    """
     pass
 
 class WebsocketServerClosedConnectionError(VaillantError):

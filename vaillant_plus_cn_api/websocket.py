@@ -10,7 +10,7 @@ from typing import Any
 import aiohttp
 
 from .const import DEFAULT_API_VERSION, APP_ID, LOGGER, DEFAULT_USER_AGENT, STATE_CONNECTING, STATE_STOPPED, STATE_CONNECTED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
-from .errors import InvalidCredentialsError, InvalidAuthError, WebsocketServerClosedConnectionError
+from .errors import InvalidTokenError, InvalidAuthError, WebsocketServerClosedConnectionError
 from .model import Token, Device
 
 DEFAULT_WATCHDOG_TIMEOUT = 30
@@ -145,7 +145,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                 if login_ret["cmd"] != "login_res" or login_ret["data"]["success"] is not True:
                     self._logger.error("login failed")
                     self._state = STATE_STOPPED
-                    raise InvalidCredentialsError
+                    raise InvalidTokenError
 
                 await ws_client.send_json({"cmd": "subscribe_req", "data": [{"did": self._device.id}]})
                 await ws_client.send_json({"cmd": "c2s_read", "data": {"did": self._device.id}})
@@ -203,7 +203,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                         self._logger.error("AIOHTTP websocket error")
                         break
 
-        except InvalidCredentialsError as error:
+        except InvalidTokenError as error:
             self._state = STATE_STOPPED
             raise InvalidAuthError
         except aiohttp.ClientResponseError as error:

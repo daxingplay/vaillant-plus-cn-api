@@ -7,7 +7,8 @@ from .model import (
 from .errors import (
   VaillantError,
   RequestError,
-  InvalidAuthError
+  InvalidAuthError,
+  InvalidCredentialsError,
 )
 from .const import (
   EVT_DEVICE_ATTR_UPDATE,
@@ -26,6 +27,7 @@ __all__ = [
   "VaillantError",
   "RequestError",
   "InvalidAuthError",
+  "InvalidCredentialsError",
   "EVT_DEVICE_ATTR_UPDATE",
   "STATE_CONNECTING",
   "STATE_CONNECTED",
