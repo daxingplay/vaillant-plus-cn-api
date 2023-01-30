@@ -257,7 +257,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         await self.send_command("ping")
 
     async def send_command(self, cmd: str, data: dict[str, Any] | None = None) -> None:
-        if self.state != STATE_STOPPED and self._ws_client is not None:
+        if self.state != STATE_STOPPED and self.state != STATE_DISCONNECTED and self._ws_client is not None:
             msg: dict[str, Any] = {
                 "cmd": cmd
             }
