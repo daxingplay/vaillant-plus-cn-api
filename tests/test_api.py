@@ -3,6 +3,7 @@
 import pytest
 import aiohttp
 import json
+import asyncio
 from aresponses import ResponsesMockServer
 
 from vaillant_plus_cn_api import VaillantApiClient
@@ -46,6 +47,7 @@ async def test_api_request_session(aresponses: ResponsesMockServer) -> None:
     await api.login(TEST_USERNAME, TEST_PASSWORD)
     assert api._session is not None
     assert api._session.closed is True
+    aresponses.assert_plan_strictly_followed()
 
 @pytest.mark.asyncio
 async def test_api_request_error(aresponses: ResponsesMockServer) -> None:
@@ -70,7 +72,54 @@ async def test_api_request_error(aresponses: ResponsesMockServer) -> None:
 
         with pytest.raises(RequestError):
             await api.login(TEST_USERNAME, TEST_PASSWORD)
+    
+    aresponses.assert_plan_strictly_followed()
 
+@pytest.mark.asyncio
+async def test_api_request_timeout_error(aresponses: ResponsesMockServer) -> None:
+    """Test the API client raising an exception upon client error.
+       Then the client should close session if the session was created during request.
+       (not use_running_session)
+    Args:
+        aresponses: An aresponses server.
+    """
+
+    async def response_handler(request):
+        await asyncio.sleep(0.1)
+        return aresponses.Response(
+            text=json.dumps({
+                "code": "200",
+                "data": {
+                    "token": "123",
+                    "uid": "1"
+                }
+            }),
+            content_type="application/json",
+            status=200,
+        )
+
+    aresponses.add(
+        HOST_APP.removeprefix("https://"),
+        "/app/user/login",
+        "post",
+        response_handler,
+    )
+
+    api = VaillantApiClient()
+    await api._session.close()
+
+    def _new_session() -> aiohttp.ClientSession:
+        return aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(0.05),
+            raise_for_status=False,
+        )
+    api._new_session = _new_session
+
+    with pytest.raises(asyncio.TimeoutError):
+        await api.login(TEST_USERNAME, TEST_PASSWORD)
+    
+    assert api._session.closed
+    aresponses.assert_plan_strictly_followed()
 
 @pytest.mark.asyncio
 async def test_api_invalid_auth_error(aresponses: ResponsesMockServer) -> None:
@@ -97,6 +146,8 @@ async def test_api_invalid_auth_error(aresponses: ResponsesMockServer) -> None:
 
         with pytest.raises(InvalidCredentialsError):
             await api.login(TEST_USERNAME, TEST_PASSWORD)
+
+    aresponses.assert_plan_strictly_followed()
 
 
 @pytest.mark.asyncio
@@ -132,6 +183,8 @@ async def test_api_login(aresponses: ResponsesMockServer) -> None:
         assert token.username == TEST_USERNAME
         assert token.password == TEST_PASSWORD
 
+    aresponses.assert_plan_strictly_followed()
+
 
 @pytest.mark.asyncio
 async def test_api_get_device_list_error(aresponses: ResponsesMockServer) -> None:
@@ -161,6 +214,8 @@ async def test_api_get_device_list_error(aresponses: ResponsesMockServer) -> Non
         with pytest.raises(InvalidAuthError):
             await api.get_device_list("1")
 
+    aresponses.assert_plan_strictly_followed()
+
 @pytest.mark.asyncio
 async def test_api_get_device_list_request_error(aresponses: ResponsesMockServer) -> None:
     """Test the API client raise an auth error when using an invalid token to get device list.
@@ -188,6 +243,8 @@ async def test_api_get_device_list_request_error(aresponses: ResponsesMockServer
 
         with pytest.raises(RequestError):
             await api.get_device_list("1")
+
+    aresponses.assert_plan_strictly_followed()
 
 @pytest.mark.asyncio
 async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
@@ -247,6 +304,8 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
         assert devices[0].mcu_hard_version == ""
         assert devices[0].is_online == True
 
+    aresponses.assert_plan_strictly_followed()
+
 
 @pytest.mark.asyncio
 async def test_api_get_device_info(aresponses: ResponsesMockServer) -> None:
@@ -289,6 +348,8 @@ async def test_api_get_device_info(aresponses: ResponsesMockServer) -> None:
         assert device.get("model") == "model_test"
         assert device.get("status_code") == 1
 
+    aresponses.assert_plan_strictly_followed()
+
 
 @pytest.mark.asyncio
 async def test_api_get_device_info_auth_error(aresponses: ResponsesMockServer) -> None:
@@ -318,6 +379,8 @@ async def test_api_get_device_info_auth_error(aresponses: ResponsesMockServer) -
 
         with pytest.raises(InvalidAuthError):
             await api.get_device_info("1", "12345678abcd")
+    
+    aresponses.assert_plan_strictly_followed()
 
 @pytest.mark.asyncio
 async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer) -> None:
@@ -347,3 +410,5 @@ async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer
 
         with pytest.raises(RequestError):
             await api.get_device_info("1", "12345678abcd")
+
+    aresponses.assert_plan_strictly_followed()

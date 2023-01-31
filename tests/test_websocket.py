@@ -128,6 +128,49 @@ async def test_websocket_login(websocket_server: FakeWebsocketServer) -> None:
         assert actual["data"]["heartbeat_interval"] == 180
         assert actual["data"]["auto_subscribe"] == False
 
+@pytest.mark.asyncio
+async def test_websocket_msg_not_handled_when_state_stopped(websocket_server: FakeWebsocketServer) -> None:
+    """Test the websocket client state handle.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session)
+
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("cmd", "")
+            if cmd == "login_req":
+                await ws.send_json({
+                    "cmd": "login_res",
+                    "data": {
+                        "success": True
+                    }
+                })
+            elif cmd == "c2s_read":
+                client._state = STATE_STOPPED
+                await asyncio.sleep(0.3)
+                await ws.send_json({
+                    "cmd": "s2c_noti",
+                    "data": {
+                        "did": "1",
+                        "attrs": {
+                            "attr1": "test_attr1_v1",
+                            "ATTR2": "test_attr2_v2",
+                            "Attr_3": "test_attr3_v3"
+                        }
+                    }
+                })
+                await asyncio.sleep(0.3)
+                await client.close()
+                await ws.close()
+
+        websocket_server.add_handler(message_handler)
+
+        on_update = AsyncMock()
+        client.async_on_update(on_update)
+
+        await client.listen()
+
+        on_update.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_websocket_login_and_subscribed(websocket_server: FakeWebsocketServer) -> None:
@@ -654,6 +697,46 @@ async def test_websocket_invalid_msg(websocket_server: FakeWebsocketServer) -> N
 
         assert client._failed_attempts == 1
 
+@pytest.mark.asyncio
+async def test_websocket_invalid_msg_other_codes(websocket_server: FakeWebsocketServer) -> None:
+    """Test the client received an invalid message.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session, max_retry_attemps=1)
+
+        state = ""
+
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("cmd", "")
+            if cmd == "login_req":
+                await ws.send_json({
+                    "cmd": "login_res",
+                    "data": {
+                        "success": True
+                    }
+                })
+            elif cmd == "c2s_read":
+                await asyncio.sleep(0.3)
+                await ws.send_json({
+                    "cmd": "s2c_invalid_msg",
+                    "data": {
+                        "error_code": 1010
+                    }
+                })
+                if client.state != STATE_STOPPED:
+                    nonlocal state
+                    state = "still_connected"
+                
+                await asyncio.sleep(0.3)
+                await client.close()
+                await ws.close()
+
+        websocket_server.add_handler(message_handler)
+
+        await client.listen()
+
+        assert state == "still_connected"
 
 @pytest.mark.asyncio
 async def test_websocket_send_command(websocket_server: FakeWebsocketServer, event_loop: asyncio.AbstractEventLoop) -> None:
