@@ -87,11 +87,7 @@ class VaillantApiClient:
                 if 399 < resp.status and 500 > resp.status:
                     raise InvalidAuthError
                 elif 200 == resp.status:
-                    if resp.content_type.startswith("text/html"):
-                        data = await resp.text()
-                        data = json.loads(data)
-                    else:
-                        data = await resp.json()
+                    data = await resp.json(content_type=None)
                 else:
                     resp.raise_for_status()
         except ClientError as err:
