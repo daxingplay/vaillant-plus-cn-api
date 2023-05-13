@@ -97,7 +97,6 @@ async def test_websocket_invalid_auth_error(websocket_server: FakeWebsocketServe
         with pytest.raises(InvalidAuthError):
             await client.listen()
 
-
 @pytest.mark.asyncio
 async def test_websocket_login(websocket_server: FakeWebsocketServer) -> None:
     """Test the websocket client login process.
@@ -127,6 +126,42 @@ async def test_websocket_login(websocket_server: FakeWebsocketServer) -> None:
         assert actual["data"]["p0_type"] == "attrs_v4"
         assert actual["data"]["heartbeat_interval"] == 180
         assert actual["data"]["auto_subscribe"] == False
+
+@pytest.mark.asyncio
+async def test_websocket_login_wait_for_login_response(websocket_server: FakeWebsocketServer) -> None:
+    """Test the websocket client should wait for login response.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session)
+
+        actual = {
+            "data": []
+        }
+
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("cmd", "")
+            if cmd == "login_req":
+                await ws.send_json({
+                    "cmd": "test",
+                    "data": {},
+                })
+                await ws.send_json({
+                    "cmd": "login_res",
+                    "data": {
+                        "success": True
+                    }
+                })
+            elif cmd == "subscribe_req":
+                actual["data"] = data.get("data", [])
+                await client.close()
+                await ws.close()
+
+        websocket_server.add_handler(message_handler)
+
+        await client.listen()
+
+        assert actual["data"][0]["did"] == "1"
 
 @pytest.mark.asyncio
 async def test_websocket_msg_not_handled_when_state_stopped(websocket_server: FakeWebsocketServer) -> None:
