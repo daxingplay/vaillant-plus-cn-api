@@ -141,19 +141,6 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                     },
                 })
 
-                login_ret = await ws_client.receive_json()
-                if login_ret["cmd"] != "login_res" or login_ret["data"]["success"] is not True:
-                    self._logger.error("login failed")
-                    self._state = STATE_STOPPED
-                    raise InvalidTokenError
-
-                await ws_client.send_json({"cmd": "subscribe_req", "data": [{"did": self._device.id}]})
-                await ws_client.send_json({"cmd": "c2s_read", "data": {"did": self._device.id}})
-
-                self._state = STATE_CONNECTED
-
-                await self._watchdog.trigger()
-
                 async for message in ws_client:
                     if self.state == STATE_STOPPED:
                         break
@@ -165,7 +152,19 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
                         self._logger.debug("Recv: %s", message)
 
-                        if cmd == "s2c_noti":
+                        if cmd == "login_res":
+                            if data["success"] is not True:
+                                self._logger.error("login failed. ret: %s", data)
+                                self._state = STATE_STOPPED
+                                raise InvalidTokenError
+
+                            await ws_client.send_json({"cmd": "subscribe_req", "data": [{"did": self._device.id}]})
+                            await ws_client.send_json({"cmd": "c2s_read", "data": {"did": self._device.id}})
+
+                            self._state = STATE_CONNECTED
+
+                            await self._watchdog.trigger()
+                        elif cmd == "s2c_noti":
                             if data["did"] == self._device.id:
                                 device_attrs = data["attrs"]
                                 self._logger.debug(
