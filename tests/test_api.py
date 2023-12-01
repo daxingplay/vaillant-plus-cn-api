@@ -7,7 +7,7 @@ import asyncio
 from aresponses import ResponsesMockServer
 
 from vaillant_plus_cn_api import VaillantApiClient
-from vaillant_plus_cn_api.const import HOST_APP, HOST_API
+from vaillant_plus_cn_api.const import API_HOST
 from vaillant_plus_cn_api.errors import InvalidAuthError, RequestError, InvalidCredentialsError
 from .conftest import TEST_USERNAME, TEST_PASSWORD
 
@@ -26,16 +26,26 @@ async def test_api_request_session(aresponses: ResponsesMockServer) -> None:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/user/login",
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
         "post",
         aresponses.Response(
             text=json.dumps({
-                "code": "200",
-                "data": {
-                    "token": "123",
-                    "uid": "1"
-                }
+                "access_token": "at1",
+                "active": True,
+                "client_id": "app-w",
+                "code": 200,
+                "expires_in": 2591999,
+                "giz_refresh_token": "giz_r_t1",
+                "giz_token": "giz_t1",
+                "giz_uid": "giz_u1",
+                "license": "made by iot",
+                "platform": 0,
+                "refresh_token": "r_t1",
+                "scope": "server",
+                "token_type": "bearer",
+                "user_id": "1234",
+                "username": "u1"
             }),
             content_type="application/json",
             status=200,
@@ -57,8 +67,8 @@ async def test_api_request_error(aresponses: ResponsesMockServer) -> None:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/user/login",
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
         "post",
         aresponses.Response(
             text="",
@@ -88,19 +98,29 @@ async def test_api_request_timeout_error(aresponses: ResponsesMockServer) -> Non
         await asyncio.sleep(0.1)
         return aresponses.Response(
             text=json.dumps({
-                "code": "200",
-                "data": {
-                    "token": "123",
-                    "uid": "1"
-                }
+                "access_token": "at1",
+                "active": True,
+                "client_id": "app-w",
+                "code": 200,
+                "expires_in": 2591999,
+                "giz_refresh_token": "giz_r_t1",
+                "giz_token": "giz_t1",
+                "giz_uid": "giz_u1",
+                "license": "made by iot",
+                "platform": 0,
+                "refresh_token": "r_t1",
+                "scope": "server",
+                "token_type": "bearer",
+                "user_id": "1234",
+                "username": "u1"
             }),
             content_type="application/json",
             status=200,
         )
 
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/user/login",
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
         "post",
         response_handler,
     )
@@ -129,8 +149,8 @@ async def test_api_invalid_auth_error(aresponses: ResponsesMockServer) -> None:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/user/login",
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
         "post",
         aresponses.Response(
             text=json.dumps({
@@ -158,16 +178,26 @@ async def test_api_login(aresponses: ResponsesMockServer) -> None:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/user/login",
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
         "post",
         aresponses.Response(
             text=json.dumps({
-                "code": "200",
-                "data": {
-                    "token": "123",
-                    "uid": "1"
-                }
+                "access_token": "123",
+                "active": True,
+                "client_id": "app-w",
+                "code": 200,
+                "expires_in": 2591999,
+                "giz_refresh_token": "giz_r_t1",
+                "giz_token": "giz_t1",
+                "giz_uid": "giz_u1",
+                "license": "made by iot",
+                "platform": 0,
+                "refresh_token": "r_t1",
+                "scope": "server",
+                "token_type": "bearer",
+                "user_id": "1",
+                "username": "u1"
             }),
             content_type="application/json",
             status=200,
@@ -178,7 +208,7 @@ async def test_api_login(aresponses: ResponsesMockServer) -> None:
         api = VaillantApiClient(session=session)
 
         token = await api.login(TEST_USERNAME, TEST_PASSWORD)
-        assert token.token == "123"
+        assert token.access_token == "123"
         assert token.uid == "1"
         assert token.username == TEST_USERNAME
         assert token.password == TEST_PASSWORD
@@ -194,17 +224,17 @@ async def test_api_get_device_list_error(aresponses: ResponsesMockServer) -> Non
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_API.removeprefix("https://"),
-        "/app/bindings",
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
         "get",
         aresponses.Response(
             text=json.dumps({
-                "error_message": "token invalid!",
-                "error_code": 9004,
-                "detail_message": None,
+                "code": 9006,
+                "msg": "token 过期",
+                "data": "Invalid token: 123"
             }),
             content_type="application/json",
-            status=400,
+            status=424,
         ),
     )
 
@@ -212,7 +242,7 @@ async def test_api_get_device_list_error(aresponses: ResponsesMockServer) -> Non
         api = VaillantApiClient(session=session)
 
         with pytest.raises(InvalidAuthError):
-            await api.get_device_list("1")
+            await api.get_device_list()
 
     aresponses.assert_plan_strictly_followed()
 
@@ -224,14 +254,14 @@ async def test_api_get_device_list_request_error(aresponses: ResponsesMockServer
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_API.removeprefix("https://"),
-        "/app/bindings",
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
         "get",
         aresponses.Response(
             text=json.dumps({
-                "error_message": "token invalid!",
-                "error_code": 9004,
-                "detail_message": None,
+                "code": 9006,
+                "msg": "token 过期",
+                "data": "Invalid token: 123"
             }),
             content_type="application/json",
             status=200,
@@ -242,7 +272,7 @@ async def test_api_get_device_list_request_error(aresponses: ResponsesMockServer
         api = VaillantApiClient(session=session)
 
         with pytest.raises(RequestError):
-            await api.get_device_list("1")
+            await api.get_device_list()
 
     aresponses.assert_plan_strictly_followed()
 
@@ -254,34 +284,89 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_API.removeprefix("https://"),
-        "/app/bindings",
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
         "get",
         aresponses.Response(
             text=json.dumps({
-                "devices": [
+                "code": 200,
+                "data": [
                     {
-                        "remark": "",
-                        "protoc": 3,
-                        "wss_port": 8,
-                        "ws_port": 9,
-                        "did": "1",
-                        "port_s": 10,
-                        "is_disabled": False,
-                        "wifi_soft_version": "wsv1",
-                        "product_key": "abcdefg",
-                        "port": 11,
-                        "mac": "12345678abcd",
-                        "role": "owner",
-                        "dev_alias": "",
-                        "is_sandbox": True,
-                        "is_online": True,
-                        "host": "test_host",
-                        "type": "normal",
-                        "product_name": "vSmartPro"
+                        "allBindList": [
+                            {
+                                "ctime": "1900-01-01 00:00:00",
+                                "devAlias": "威精灵",
+                                "devLabel": None,
+                                "deviceSn": None,
+                                "did": "1",
+                                "homeId": 2,
+                                "homeName": "家",
+                                "isManger": 1,
+                                "isOnline": 1,
+                                "lastOfflineTime": "2023-12-31 23:59:59",
+                                "mac": "12345678abcd",
+                                "modelInfo": {
+                                    "aliasName": "两用炉",
+                                    "model": "model1"
+                                },
+                                "productId": 3,
+                                "productKey": "abcdefg",
+                                "productName": "威精灵",
+                                "roomId": 5,
+                                "roomName": "home",
+                                "serialNumber": "6",
+                                "servicesCount": 7,
+                                "sno": "8",
+                                "verboseName": "威能温控器"
+                            }
+                        ],
+                        "deviceCount": 1,
+                        "groupCount": 1,
+                        "groupList": [
+                            {
+                                "bindList": [
+                                    {
+                                        "ctime": "1900-01-01 00:00:00",
+                                        "devAlias": "威精灵",
+                                        "devLabel": None,
+                                        "deviceSn": None,
+                                        "did": "1",
+                                        "homeId": 2,
+                                        "homeName": "家",
+                                        "isManger": 1,
+                                        "isOnline": 1,
+                                        "lastOfflineTime": "2023-12-31 23:59:59",
+                                        "mac": "12345678abcd",
+                                        "modelInfo": {
+                                            "aliasName": "两用炉",
+                                            "model": "model1"
+                                        },
+                                        "productId": 3,
+                                        "productKey": "abcdefg",
+                                        "productName": "威精灵",
+                                        "roomId": 5,
+                                        "roomName": "home",
+                                        "serialNumber": "6",
+                                        "servicesCount": 7,
+                                        "sno": "8",
+                                        "verboseName": "威能温控器"
+                                    }
+                                ],
+                                "id": 8,
+                                "name": "家"
+                            }
+                        ],
+                        "id": 9,
+                        "location": "未设置地理位置",
+                        "locationId": "",
+                        "name": "家",
+                        "shareBindList": []
                     }
-                ]
-            }),
+                ],
+                "display": None,
+                "msg": "本次请求成功!"
+            }
+),
             content_type="text/html",
             status=200,
         ),
@@ -290,47 +375,33 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
     async with aiohttp.ClientSession() as session:
         api = VaillantApiClient(session=session)
 
-        devices = await api.get_device_list("1")
+        devices = await api.get_device_list()
         assert len(devices) == 1
         assert devices[0].id == "1"
         assert devices[0].mac == "12345678abcd"
         assert devices[0].product_key == "abcdefg"
-        assert devices[0].host == "test_host"
-        assert devices[0].wss_port == 8
-        assert devices[0].ws_port == 9
-        assert devices[0].wifi_soft_version == "wsv1"
-        assert devices[0].wifi_hard_version == ""
-        assert devices[0].mcu_soft_version == ""
-        assert devices[0].mcu_hard_version == ""
         assert devices[0].is_online == True
 
     aresponses.assert_plan_strictly_followed()
 
 
 @pytest.mark.asyncio
-async def test_api_get_device_info(aresponses: ResponsesMockServer) -> None:
-    """Test the API client get device info method.
+async def test_api_control_device(aresponses: ResponsesMockServer) -> None:
+    """Test the API client control device method.
 
     Args:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/device/sn/status",
-        "get",
+        API_HOST.removeprefix("https://"),
+        "/app/device/control/1",
+        "post",
         aresponses.Response(
             text=json.dumps({
-                "code": "200",
-                "data": {
-                    "gizDid": "1",
-                    "mac": "12345678abcd",
-                    "model": "model_test",
-                    "serialNumber": "2",
-                    "sno": "3",
-                    "status": 1
-                },
+                "code": 200,
+                "data": None,
                 "display": None,
-                "message": "本次请求成功!"
+                "msg": "本次请求成功!"
             }),
             content_type="application/json",
             status=200,
@@ -340,37 +411,30 @@ async def test_api_get_device_info(aresponses: ResponsesMockServer) -> None:
     async with aiohttp.ClientSession() as session:
         api = VaillantApiClient(session=session)
 
-        device = await api.get_device_info("1", "12345678abcd")
-        assert device.get("sno") == "3"
-        assert device.get("mac") == "12345678abcd"
-        assert device.get("device_id") == "1"
-        assert device.get("serial_number") == "2"
-        assert device.get("model") == "model_test"
-        assert device.get("status_code") == 1
+        await api.control_device("1", "DHW_setpoint", 45.5)
 
     aresponses.assert_plan_strictly_followed()
 
 
 @pytest.mark.asyncio
-async def test_api_get_device_info_auth_error(aresponses: ResponsesMockServer) -> None:
-    """Test the API client raise an auth error when getting device info.
+async def test_api_control_device_auth_error(aresponses: ResponsesMockServer) -> None:
+    """Test the API client raise an auth error when controlling the device.
 
     Args:
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/device/sn/status",
-        "get",
+        API_HOST.removeprefix("https://"),
+        "/app/device/control/1",
+        "post",
         aresponses.Response(
             text=json.dumps({
-                "code": "505",
-                "message": "未登录",
-                "data": None,
-                "display": None
+                "code": 9006,
+                "msg": "token 过期",
+                "data": "Invalid token: 123"
             }),
             content_type="application/json",
-            status=200,
+            status=424,
         ),
     )
 
@@ -378,7 +442,7 @@ async def test_api_get_device_info_auth_error(aresponses: ResponsesMockServer) -
         api = VaillantApiClient(session=session)
 
         with pytest.raises(InvalidAuthError):
-            await api.get_device_info("1", "12345678abcd")
+            await api.control_device("1", "DHW_setpoint", 45.5)
     
     aresponses.assert_plan_strictly_followed()
 
@@ -390,9 +454,9 @@ async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer
         aresponses: An aresponses server.
     """
     aresponses.add(
-        HOST_APP.removeprefix("https://"),
-        "/app/device/sn/status",
-        "get",
+        API_HOST.removeprefix("https://"),
+        "/app/device/control/1",
+        "post",
         aresponses.Response(
             text=json.dumps({
                 "code": "11111111",
@@ -409,6 +473,6 @@ async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer
         api = VaillantApiClient(session=session)
 
         with pytest.raises(RequestError):
-            await api.get_device_info("1", "12345678abcd")
+            await api.control_device("1", "DHW_setpoint", 45.5)
 
     aresponses.assert_plan_strictly_followed()

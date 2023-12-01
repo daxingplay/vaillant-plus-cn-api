@@ -12,7 +12,7 @@ def test_model_token_serialize() -> None:
       app_id="1",
       username="u1",
       password="pass1",
-      token="tk1",
+      access_token="tk1",
       uid="uid1"
     )
     s = token.serialize()
@@ -25,5 +25,5 @@ def test_model_token_deserialize() -> None:
     assert token.app_id == "1"
     assert token.username == "u1"
     assert token.password == "pass1"
-    assert token.token == "tk1"
+    assert token.access_token == "tk1"
     assert token.uid == "uid1"
