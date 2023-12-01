@@ -3,13 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import json
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import aiohttp
 
-from .const import DEFAULT_API_VERSION, APP_ID, LOGGER, DEFAULT_USER_AGENT, STATE_CONNECTING, STATE_STOPPED, STATE_CONNECTED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
+from .const import API_HOST, APP_KEY, LOGGER, STATE_CONNECTING, STATE_STOPPED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
 from .errors import InvalidTokenError, InvalidAuthError, WebsocketServerClosedConnectionError
 from .model import Token, Device
 
@@ -72,8 +70,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         token: Token,
         device: Device,
         *,
-        application_id: str = APP_ID,
-        api_version: str = DEFAULT_API_VERSION,
+        application_key: str = APP_KEY,
         logger: logging.Logger = LOGGER,
         session: aiohttp.ClientSession | None = None,
         use_ssl: bool = True,
@@ -84,8 +81,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         """Initialize.
 
         Args:
-            application_key: An Ambient Weather application key.
-            api_key: An Ambient Weather API key.
+            application_key: Application key.
             api_version: The version of the API to query.
             logger: The logger to use.
         """
@@ -95,21 +91,14 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         self._verify_ssl = verify_ssl
         self._token = token
         self._device = device
-        self._application_id = application_id
-        self._api_version = api_version
-        self._async_on_subscribe_handler: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        self._application_key = application_key
         self._async_on_update_handler: Callable[..., Awaitable[None]] | None = None
-        self._on_subscribe_handler: Callable[[dict[str, Any]], None] | None = None
         self._on_update_handler: Callable[..., None] | None = None
         self._logger = logger
         self._max_retry_attemps = max_retry_attemps
         self._state = None
         # self._ws_client = None
         self._watchdog = WebsocketWatchdog(logger, self.ping, timeout_seconds=heartbeat_interval)
-
-        self._endpoint = f"ws://{self._device.host}:{self._device.ws_port}"
-        if self._use_ssl:
-            self._endpoint = f"wss://{self._device.host}:{self._device.wss_port}"
 
     @property
     def state(self):
@@ -121,25 +110,24 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
         try:
             async with self._session.ws_connect(
-                f"{self._endpoint}/ws/app/v1",
+                f"{API_HOST}/monitor/ws/app",
                 verify_ssl=self._verify_ssl,
                 headers={
-                    "User-Agent": DEFAULT_USER_AGENT,
+                    "Authorization": f"Bearer {self._token.access_token}",
                 },
             ) as ws_client:
                 self._ws_client = ws_client
 
                 await ws_client.send_json({
-                    "cmd": "login_req",
-                    "data": {
-                        "appid": self._token.app_id or self._application_id,
-                        "uid": self._token.uid,
-                        "token": self._token.token,
-                        "p0_type": "attrs_v4",
-                        "heartbeat_interval": 180,
-                        "auto_subscribe": False,
-                    },
+                    "type": "msg",
+                    "productKey": self._device.product_key,
+                    "mac": self._device.mac,
+                    "did": self._device.id,
                 })
+
+                self._state = STATE_SUBSCRIBED
+
+                await self._watchdog.trigger()
 
                 async for message in ws_client:
                     if self.state == STATE_STOPPED:
@@ -147,49 +135,23 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
                     if message.type == aiohttp.WSMsgType.TEXT:
                         msg: dict = message.json()
-                        cmd = msg.get("cmd", "")
+                        msg_type = msg.get("type", "")
                         data = msg.get("data", {})
 
                         self._logger.debug("Recv: %s", message)
 
-                        if cmd == "login_res":
-                            if data["success"] is not True:
-                                self._logger.error("login failed. ret: %s", data)
-                                self._state = STATE_STOPPED
-                                raise InvalidTokenError
-
-                            await ws_client.send_json({"cmd": "subscribe_req", "data": [{"did": self._device.id}]})
-                            await ws_client.send_json({"cmd": "c2s_read", "data": {"did": self._device.id}})
-
-                            self._state = STATE_CONNECTED
-
-                            await self._watchdog.trigger()
-                        elif cmd == "s2c_noti":
+                        if msg_type == "2":
                             if data["did"] == self._device.id:
-                                device_attrs = data["attrs"]
+                                device_attrs = data["data"]
                                 self._logger.debug(
                                     "Recv atrrs for device %s => %s", data["did"], device_attrs)
-                                if self.state != STATE_SUBSCRIBED:
-                                    if self._async_on_subscribe_handler is not None:
-                                        await self._async_on_subscribe_handler(device_attrs)
-                                    elif self._on_subscribe_handler is not None:
-                                        self._on_subscribe_handler(device_attrs)
-                                    self._state = STATE_SUBSCRIBED
                                 
                                 if self._async_on_update_handler is not None:
                                     await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
                                 elif self._on_update_handler is not None:
                                     self._on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
-                        elif cmd == "pong":
+                        elif msg_type == "pong":
                             await self._watchdog.trigger()
-                        elif cmd == "s2c_invalid_msg":
-                            self._logger.error("Server pushed an error msg: %s", message)
-                            error_code = data["error_code"]
-                            # {'cmd': 's2c_invalid_msg', 'data': {'error_code': 1009, 'msg': 'M2M socket has closed, please login again!'}}
-                            # {'cmd': 's2c_invalid_msg', 'data': {'error_code': 1011, 'msg': 'No heartbeat!'}}
-                            # TODO: other error code should treat more gracefully.
-                            if error_code == 1009 or error_code == 1011:
-                                raise WebsocketServerClosedConnectionError
                         else:
                             self._logger.info("Unhandled msg: %s", msg)
 
@@ -253,26 +215,12 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
     async def ping(self) -> None:
         """Send ping to server."""
-        await self.send_command("ping")
-
-    async def send_command(self, cmd: str, data: dict[str, Any] | None = None) -> None:
-        if self.state != STATE_STOPPED and self.state != STATE_DISCONNECTED and self._ws_client is not None:
-            msg: dict[str, Any] = {
-                "cmd": cmd
-            }
-            if data is not None:
-                msg["data"] = data
-
-            await self._ws_client.send_json(msg)
-
-    def async_on_subscribe(self, handler: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
-        self._async_on_subscribe_handler = handler
+        await self._ws_client.send_json({
+            "type": "ping"
+        })
 
     def async_on_update(self, handler: Callable[..., Awaitable[None]]) -> None:
         self._async_on_update_handler = handler
-
-    def on_subscribe(self, handler: Callable[[dict[str, Any]], None]) -> None:
-        self._on_subscribe_handler = handler
 
     def on_update(self, handler: Callable[..., None]) -> None:
         self._on_update_handler = handler

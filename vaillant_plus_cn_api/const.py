@@ -4,13 +4,12 @@ import base64
 
 LOGGER = logging.getLogger(__package__)
 
-DEFAULT_API_VERSION = "1.3"
-
-HOST_APP = "https://appapi.vaillant.com.cn"
-HOST_API = "https://api.vaillant.com.cn"
+API_HOST = "https://vicapi.vaillant.com.cn"
 
 APP_ID = base64.b64decode("MWY1YjkzNzNmZTk2NGYyNTgxYjBhM2EzZTI2MzYxZTY=").decode("ascii")
-DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 7.1.2; Redmi 4X Build/N2G47H; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/66.0.3359.158 Mobile Safari/537.36"
+APP_KEY = base64.b64decode("OTEwOWZiM2VhNmMwNGNmMWJlMzRjNzFmZjgyYTUxZWM=").decode("ascii")
+APP_AUTH = base64.b64decode("WVhCd0xYYzZhVzkwTWxFeFdETlk=").decode("ascii")
+DEFAULT_USER_AGENT = base64.b64decode("VmFpbGxhbnRQbHVzLzIzMDMyOTAwNSBDRk5ldHdvcmsvMTQ4NSBEYXJ3aW4vMjMuMS4w").decode("ascii")
 
 STATE_CONNECTING = "connecting"
 STATE_CONNECTED = "connected"

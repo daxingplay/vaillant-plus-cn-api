@@ -18,25 +18,26 @@ class Device:
     id: str
     mac: str
     product_key: str
+    product_id: int
     product_name: str
-    host: str
-    ws_port: int
-    wss_port: int
-    wifi_soft_version: str
-    wifi_hard_version: str
-    mcu_soft_version: str
-    mcu_hard_version: str
+    product_verbose_name: str
     is_online: bool
-    model: str = ""
-    serial_number: str = ""
-    sno: str = ""
+    is_manager: bool
+    group_id: int
+    sno: str
+    create_time: str
+    last_offline_time: str
+    model_alias: str
+    model: str
+    serial_number: str
+    services_count: int
 
 @dataclass
 class Token:
     app_id: str
     username: str
     password: str
-    token: str = ""
+    access_token: str = ""
     uid: str = ""
 
     def serialize(self) -> str:
@@ -46,7 +47,7 @@ class Token:
             f"{CONF_APP_ID}": self.app_id,
             f"{CONF_USERNAME}": self.username,
             f"{CONF_PASSWORD}": self.password,
-            f"{CONF_TOKEN}": self.token,
+            f"{CONF_TOKEN}": self.access_token,
             f"{CONF_UID}": self.uid,
         })
         return base64.b64encode(s.encode("ascii")).decode("ascii")
@@ -60,6 +61,6 @@ class Token:
             app_id=data[CONF_APP_ID],
             username=data[CONF_USERNAME],
             password=data[CONF_PASSWORD],
-            token=data[CONF_TOKEN],
+            access_token=data[CONF_TOKEN],
             uid=data[CONF_UID],
         )

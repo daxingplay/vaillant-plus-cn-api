@@ -1,20 +1,17 @@
 """Define API client to interact with the Vaillant API."""
 from __future__ import annotations
 
-import json
 import logging
-from datetime import date
 from typing import Any, cast
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientSession, ClientTimeout, FormData
 from aiohttp.client_exceptions import ClientError
 
 from .const import (
-    DEFAULT_API_VERSION,
     LOGGER,
-    HOST_API,
-    HOST_APP,
-    APP_ID,
+    API_HOST,
+    APP_KEY,
+    APP_AUTH,
     DEFAULT_USER_AGENT,
 )
 from .errors import RequestError, InvalidAuthError, RequestError, InvalidCredentialsError
@@ -30,22 +27,23 @@ class VaillantApiClient:
     def __init__(
         self,
         *,
-        application_id: str = APP_ID,
+        app_key: str = APP_KEY,
+        app_auth: str = APP_AUTH,
         user_agent: str = DEFAULT_USER_AGENT,
-        api_version: str = DEFAULT_API_VERSION,
         logger: logging.Logger = LOGGER,
         session: ClientSession | None = None,
     ) -> None:
         """Initialize.
 
         Args:
-            application_id: .
-            api_version: The version of the API to query.
+            app_key: App key.
+            app_auth: The username & password combination for authorization.
             logger: The logger to use.
             session: An optional aiohttp ClientSession.
         """
-        self._application_id: str = application_id
-        self._api_version: str = api_version
+        self._application_key: str = app_key
+        self._application_auth: str = app_auth
+        self._access_token: str = ""
         self._user_agent: str = user_agent
         self._logger = logger
         self._session: ClientSession = session or self._new_session()
@@ -57,7 +55,7 @@ class VaillantApiClient:
         )
 
     async def _request(
-        self, method: str, url: str, **kwargs: dict[str, Any]
+        self, method: str, url: str, **kwargs: Any
     ) -> dict[str, Any]:
         """Make a request against the API.
 
@@ -76,13 +74,18 @@ class VaillantApiClient:
         kwargs.setdefault("params", {})
         kwargs.setdefault("headers", {})
 
+        kwargs["headers"]["appkey"] = self._application_key
+
+        if self._access_token != "":
+            kwargs["headers"]["Authorization"] = f"Bearer {self._access_token}"
+
         if use_running_session := self._session and not self._session.closed:
             session = self._session
         else:
             session = self._new_session()
 
         try:
-            async with session.request(method, url, **kwargs) as resp:
+            async with session.request(method, f"{API_HOST}/{url}", **kwargs) as resp:
                 data = {}
                 if 399 < resp.status and 500 > resp.status:
                     raise InvalidAuthError
@@ -103,90 +106,74 @@ class VaillantApiClient:
     async def login(self, username: str, password: str) -> Token:
         """Login to get uid and token."""
         data = {
-            "appKey": self._application_id,
-            "version": self._api_version,
-            "data": {"username": username, "password": password},
+            "appkey": self._application_key,
+            "scope": "server",
+            "username": username,
+            "password": password,
         }
         headers = {
             "User-Agent": self._user_agent,
-            "Referer": "http://localhost/main.html",
-            "X-Requested-With": "com.vaillant.plus",
-            "Origin": "http://localhost",
+            "Authorization": f"Basic {self._application_auth}",
         }
         resp = await self._request(
-            "post", f"{HOST_APP}/app/user/login", json=data, headers=headers
+            "post", "auth/oauth/token?grant_type=password", data=FormData(data), headers=headers
         )
-        if resp is None or resp["code"] != "200" or resp["data"] is None:
+        if resp is None or resp["code"] != 200 or resp["access_token"] is None:
             raise InvalidCredentialsError
 
         return Token(
-            app_id=self._application_id,
+            app_id=self._application_key,
             username=username,
             password=password,
-            token=resp["data"]["token"],
-            uid=resp["data"]["uid"],
+            access_token=resp["access_token"],
+            uid=resp["user_id"],
         )
 
-    async def get_device_list(self, token: str) -> list[Device]:
+    async def get_device_list(self) -> list[Device]:
         """Get device list."""
-        headers = {
-            "User-Agent": "GizWifiSDK (v13.21121715)",
-            "X-Gizwits-Application-Id": self._application_id,
-            "X-Gizwits-User-token": token,
-        }
         resp = await self._request(
             "get",
-            f"{HOST_API}/app/bindings?show_disabled=0&limit=20&skip=0",
-            headers=headers,
+            f"app/device/getBindList?appKey={self._application_key}&version=1.0",
         )
-        if resp.get("error_code") is not None:
+        if resp.get("code") != 200:
             raise RequestError
         return [
             Device(
                 id=d.get("did"),
                 mac=d.get("mac"),
-                product_key=d.get("product_key"),
-                product_name=d.get("product_name"),
-                host=d.get("host"),
-                ws_port=d.get("ws_port"),
-                wss_port=d.get("wss_port"),
-                wifi_soft_version=d.get("wifi_soft_version", ""),
-                wifi_hard_version=d.get("wifi_hard_version", ""),
-                mcu_soft_version=d.get("mcu_soft_version", ""),
-                mcu_hard_version=d.get("mcu_hard_version", ""),
-                is_online=d.get("is_online"),
+                product_key=d.get("productKey"),
+                product_id=d.get("productId"),
+                product_name=d.get("name"),
+                product_verbose_name=d.get("verboseName"),
+                is_online=d.get("isOnline") == 1,
+                is_manager=d.get("isManger") == 1,
+                group_id=d.get("groupId"),
+                sno=d.get("sno"),
+                create_time=d.get("ctime"),
+                last_offline_time=d.get("lastOfflineTime"),
+                model_alias=d["modelInfo"]["aliasName"],
+                model=d["modelInfo"]["model"],
+                serial_number=d["serialNumber"],
+                services_count=d["servicesCount"],
             )
-            for d in resp["devices"]
+            for d in resp["data"][0]["allBindList"]
         ]
 
-    async def get_device_info(self, token: str, mac_addr: str) -> dict[str, str]:
-        """Get device info"""
-        headers = {
-            "Authorization": token,
-            "Version": self._api_version,
-            "User-Agent": self._user_agent,
-            "Referer": "http://localhost/main.html",
-            "X-Requested-With": "com.vaillant.plus",
-            "Origin": "http://localhost",
-        }
-        upper_mac = str.upper(mac_addr)
+    async def control_device(self, device_id: str, attr_name: str, value: Any):
+        """Control device."""
         resp = await self._request(
-            "get",
-            f"{HOST_APP}/app/device/sn/status?mac={upper_mac}",
-            headers=headers,
+            "post",
+            f"app/device/control/{device_id}",
+            json={
+                "appKey": self._application_key,
+                "data": {
+                    "attrs": {
+                        f"{attr_name}": value
+                    }
+                },
+                "version": "1.0"
+            }
         )
-        code = resp.get("code", 0)
-        if code == "505":
-            raise InvalidAuthError
-
-        if code != "200" or resp["data"] is None:
+        if resp.get("code") != 200:
             raise RequestError
-
-        return {
-            "sno": resp["data"]["sno"],
-            "mac": resp["data"]["mac"],
-            "device_id": resp["data"]["gizDid"],
-            "serial_number": resp["data"]["serialNumber"],
-            "model": resp["data"]["model"],
-            "status_code": resp["data"]["status"],
-        }
+        
