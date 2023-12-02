@@ -143,7 +143,7 @@ class VaillantApiClient:
                 mac=d.get("mac"),
                 product_key=d.get("productKey"),
                 product_id=d.get("productId"),
-                product_name=d.get("name"),
+                product_name=d.get("productName"),
                 product_verbose_name=d.get("verboseName"),
                 is_online=d.get("isOnline") == 1,
                 is_manager=d.get("isManger") == 1,
