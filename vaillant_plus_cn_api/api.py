@@ -75,8 +75,9 @@ class VaillantApiClient:
         kwargs.setdefault("headers", {})
 
         kwargs["headers"]["appkey"] = self._application_key
+        kwargs["headers"]["User-Agent"] = self._user_agent
 
-        if self._access_token != "":
+        if "Authorization" not in kwargs["headers"] and self._access_token != "":
             kwargs["headers"]["Authorization"] = f"Bearer {self._access_token}"
 
         if use_running_session := self._session and not self._session.closed:
@@ -84,10 +85,13 @@ class VaillantApiClient:
         else:
             session = self._new_session()
 
+        self._logger.debug("Request with args:", kwargs)
+
         try:
             async with session.request(method, f"{API_HOST}/{url}", **kwargs) as resp:
                 data = {}
                 if 399 < resp.status and 500 > resp.status:
+                    self._logger.warning("Invalid auth. Status: %s. Content: %s", resp.status, await resp.text())
                     raise InvalidAuthError
                 elif 200 == resp.status:
                     data = await resp.json(content_type=None)
@@ -103,6 +107,10 @@ class VaillantApiClient:
 
         return cast(dict[str, Any], data)
 
+    def update_token(self, token: Token) -> None:
+        """Update access token."""
+        self._access_token = token.access_token
+
     async def login(self, username: str, password: str) -> Token:
         """Login to get uid and token."""
         data = {
@@ -112,7 +120,6 @@ class VaillantApiClient:
             "password": password,
         }
         headers = {
-            "User-Agent": self._user_agent,
             "Authorization": f"Basic {self._application_auth}",
         }
         resp = await self._request(
@@ -120,16 +127,18 @@ class VaillantApiClient:
         )
         if resp is None or resp["code"] != 200 or resp["access_token"] is None:
             raise InvalidCredentialsError
-        
-        self._access_token = resp["access_token"]
 
-        return Token(
+        token = Token(
             app_id=self._application_key,
             username=username,
             password=password,
             access_token=resp["access_token"],
             uid=resp["user_id"],
         )
+        
+        self.update_token(token)
+
+        return token
 
     async def get_device_list(self) -> list[Device]:
         """Get device list."""
