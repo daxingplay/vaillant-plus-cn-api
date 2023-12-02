@@ -38,7 +38,7 @@ class FakeWebsocketServer(BaseTestServer):
 
     async def _make_runner(self, **kwargs):
         app = web.Application()
-        app.add_routes([web.get('/ws/app/v1', self._websocket_handler)])
+        app.add_routes([web.get('/monitor/ws/app', self._websocket_handler)])
         return web.AppRunner(app=app, **kwargs)
 
     async def _websocket_handler(self, request):

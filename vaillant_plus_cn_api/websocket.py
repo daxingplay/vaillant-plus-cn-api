@@ -11,7 +11,7 @@ from .const import API_HOST, APP_KEY, LOGGER, STATE_CONNECTING, STATE_STOPPED, S
 from .errors import InvalidTokenError, InvalidAuthError, WebsocketServerClosedConnectionError
 from .model import Token, Device
 
-DEFAULT_WATCHDOG_TIMEOUT = 30
+DEFAULT_WATCHDOG_TIMEOUT = 15
 
 
 class WebsocketWatchdog:
@@ -71,6 +71,8 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         device: Device,
         *,
         application_key: str = APP_KEY,
+        api_host: str = API_HOST,
+        port: int | None = None,
         logger: logging.Logger = LOGGER,
         session: aiohttp.ClientSession | None = None,
         use_ssl: bool = True,
@@ -97,8 +99,19 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         self._logger = logger
         self._max_retry_attemps = max_retry_attemps
         self._state = None
-        # self._ws_client = None
+        self._failed_attempts = 0
+        self._ws_client: aiohttp.ClientWebSocketResponse | None = None
         self._watchdog = WebsocketWatchdog(logger, self.ping, timeout_seconds=heartbeat_interval)
+
+        self._endpoint = ""
+        endpoint = api_host.removeprefix("https://")
+        if self._use_ssl:
+            self._endpoint = f"wss://{endpoint}"
+        else:
+            self._endpoint = f"ws://{endpoint}"
+
+        if port is not None:
+            self._endpoint = f"{self._endpoint}:{port}"
 
     @property
     def state(self):
@@ -106,11 +119,13 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         return self._state
 
     async def connect(self) -> None:
+        """Connect to websocket server."""
+        
         self._state = STATE_CONNECTING
 
         try:
             async with self._session.ws_connect(
-                f"{API_HOST}/monitor/ws/app",
+                f"{self._endpoint}/monitor/ws/app",
                 verify_ssl=self._verify_ssl,
                 headers={
                     "Authorization": f"Bearer {self._token.access_token}",
@@ -141,31 +156,35 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                         self._logger.debug("Recv: %s", message)
 
                         if msg_type == "2":
-                            if data["did"] == self._device.id:
-                                device_attrs = data["data"]
+                            device_id = msg.get("did")
+                            if device_id == self._device.id:
                                 self._logger.debug(
-                                    "Recv atrrs for device %s => %s", data["did"], device_attrs)
+                                    "Recv atrrs for device %s => %s", device_id, data)
                                 
                                 if self._async_on_update_handler is not None:
-                                    await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
+                                    await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": data })
                                 elif self._on_update_handler is not None:
-                                    self._on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": device_attrs })
+                                    self._on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": data })
                         elif msg_type == "pong":
+                            self._logger.debug("Recieved pong")
                             await self._watchdog.trigger()
                         else:
                             self._logger.info("Unhandled msg: %s", msg)
 
+                    elif message.type == aiohttp.WSMsgType.CLOSE:
+                        self._logger.warning("Websocket server closing: %s, %s", message.data, message.extra)
                     elif message.type == aiohttp.WSMsgType.CLOSED:
                         self._logger.warning(
-                            "AIOHTTP websocket connection closed")
+                            "Websocket connection closed")
                         break
 
                     elif message.type == aiohttp.WSMsgType.ERROR:
-                        self._logger.error("AIOHTTP websocket error")
+                        self._logger.error("Websocket error")
                         break
 
         except InvalidTokenError as error:
             self._state = STATE_STOPPED
+            self._logger.warning("Websocket server auth failed: %s", error)
             raise InvalidAuthError
         except aiohttp.ClientResponseError as error:
             if error.code == 401:
@@ -208,16 +227,17 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         """Close the listening websocket."""
         self._state = STATE_STOPPED
         self._watchdog.cancel()
-        try:
+        if self._ws_client is not None:
             await self._ws_client.close()
-        except Exception as error:
-            self._logger.warning("Close websocket error: %s", error)
 
     async def ping(self) -> None:
         """Send ping to server."""
-        await self._ws_client.send_json({
-            "type": "ping"
-        })
+        if self._ws_client is not None:
+            await self._ws_client.send_json({
+                "type": "ping"
+            })
+        else:
+            self._logger.error("Cannot send ping")
 
     def async_on_update(self, handler: Callable[..., Awaitable[None]]) -> None:
         self._async_on_update_handler = handler
