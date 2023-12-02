@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vaillant-plus-cn-api"
-version = "1.0.0"
+version = "1.1.0"
 description = "Python package for interacting with Vaillant devices sold in China mainland using API"
 authors = ["daxingplay <daxingplay@gmail.com>"]
 readme = "README.md"

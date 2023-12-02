@@ -64,3 +64,8 @@ class Token:
             access_token=data[CONF_TOKEN],
             uid=data[CONF_UID],
         )
+    
+    @classmethod
+    def equals(cls, token1: Token, token2: Token) -> bool:
+        """Compare if two tokens equals"""
+        return token1.app_id == token2.app_id and token1.username == token2.username and token1.password == token2.password and token1.access_token == token2.access_token and token1.uid == token2.uid
