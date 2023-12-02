@@ -120,6 +120,8 @@ class VaillantApiClient:
         )
         if resp is None or resp["code"] != 200 or resp["access_token"] is None:
             raise InvalidCredentialsError
+        
+        self._access_token = resp["access_token"]
 
         return Token(
             app_id=self._application_key,

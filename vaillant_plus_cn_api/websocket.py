@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import aiohttp
 
-from .const import API_HOST, APP_KEY, LOGGER, STATE_CONNECTING, STATE_STOPPED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
+from .const import API_HOST, APP_KEY, LOGGER, STATE_CONNECTING, STATE_STOPPED, STATE_CONNECTED, STATE_SUBSCRIBED, STATE_DISCONNECTED, EVT_DEVICE_ATTR_UPDATE
 from .errors import InvalidTokenError, InvalidAuthError, WebsocketServerClosedConnectionError
 from .model import Token, Device
 
@@ -94,7 +95,9 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         self._token = token
         self._device = device
         self._application_key = application_key
+        self._async_on_subscribe_handler: Callable[[dict[str, Any]], Awaitable[None]] | None = None
         self._async_on_update_handler: Callable[..., Awaitable[None]] | None = None
+        self._on_subscribe_handler: Callable[[dict[str, Any]], None] | None = None
         self._on_update_handler: Callable[..., None] | None = None
         self._logger = logger
         self._max_retry_attemps = max_retry_attemps
@@ -140,7 +143,7 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                     "did": self._device.id,
                 })
 
-                self._state = STATE_SUBSCRIBED
+                self._state = STATE_CONNECTED
 
                 await self._watchdog.trigger()
 
@@ -160,6 +163,13 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                             if device_id == self._device.id:
                                 self._logger.debug(
                                     "Recv atrrs for device %s => %s", device_id, data)
+
+                                if self.state != STATE_SUBSCRIBED:
+                                    if self._async_on_subscribe_handler is not None:
+                                        await self._async_on_subscribe_handler(data)
+                                    elif self._on_subscribe_handler is not None:
+                                        self._on_subscribe_handler(data)
+                                self._state = STATE_SUBSCRIBED
                                 
                                 if self._async_on_update_handler is not None:
                                     await self._async_on_update_handler(EVT_DEVICE_ATTR_UPDATE, { "data": data })
@@ -239,8 +249,14 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         else:
             self._logger.error("Cannot send ping")
 
+    def async_on_subscribe(self, handler: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+        self._async_on_subscribe_handler = handler
+
     def async_on_update(self, handler: Callable[..., Awaitable[None]]) -> None:
         self._async_on_update_handler = handler
+
+    def on_subscribe(self, handler: Callable[[dict[str, Any]], None]) -> None:
+        self._on_subscribe_handler = handler
 
     def on_update(self, handler: Callable[..., None]) -> None:
         self._on_update_handler = handler
