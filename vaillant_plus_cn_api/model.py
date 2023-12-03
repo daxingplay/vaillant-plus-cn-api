@@ -26,11 +26,11 @@ class Device:
     group_id: int
     sno: str
     create_time: str
-    last_offline_time: str
     model_alias: str
     model: str
     serial_number: str
-    services_count: int
+    services_count: int = 0
+    last_offline_time: str = ""
 
 @dataclass
 class Token:
