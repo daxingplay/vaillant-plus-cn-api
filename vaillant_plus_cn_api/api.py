@@ -14,7 +14,7 @@ from .const import (
     APP_AUTH,
     DEFAULT_USER_AGENT,
 )
-from .errors import RequestError, InvalidAuthError, RequestError, InvalidCredentialsError
+from .errors import RequestError, InvalidAuthError, InvalidCredentialsError
 from .model import Token, Device
 
 DEFAULT_LIMIT = 288
