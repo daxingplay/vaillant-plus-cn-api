@@ -13,7 +13,7 @@ from typing import (
 from vaillant_plus_cn_api import VaillantWebsocketClient
 from vaillant_plus_cn_api.model import Token, Device
 from vaillant_plus_cn_api.const import STATE_STOPPED, EVT_DEVICE_ATTR_UPDATE
-from vaillant_plus_cn_api.errors import InvalidAuthError, WebsocketServerClosedConnectionError
+from vaillant_plus_cn_api.errors import InvalidTokenError, InvalidAuthError
 from .conftest import TEST_USERNAME, TEST_PASSWORD, FakeWebsocketServer
 
 
@@ -513,30 +513,32 @@ async def test_websocket_events_not_bind(websocket_server: FakeWebsocketServer) 
         assert client._async_on_update_handler is None
 
 
-# @pytest.mark.asyncio
-# async def test_websocket_invalid_msg(websocket_server: FakeWebsocketServer) -> None:
-#     """Test the client will fail when received an invalid message.
-#     """
+@pytest.mark.asyncio
+async def test_websocket_invalid_msg(websocket_server: FakeWebsocketServer, caplog) -> None:
+    """Test the client will fail when received an invalid message.
+    """
 
-#     async with aiohttp.ClientSession() as session:
-#         client = get_client(websocket_server, session, max_retry_attemps=1)
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session, max_retry_attemps=1)
 
-#         async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
-#             cmd = data.get("type", "")
-#             if cmd == "msg":
-#                 await asyncio.sleep(0.3)
-#                 await ws.send_json({
-#                     "cmd": "s2c_invalid_msg",
-#                     "data": {
-#                         "error_code": 1009
-#                     }
-#                 })
+        async def message_handler(data: dict[str, Any], ws: web.WebSocketResponse):
+            cmd = data.get("type", "")
+            if cmd == "msg":
+                await ws.send_json({
+                    "type": "unknown_type",
+                    "data": {}
+                })
+                await asyncio.sleep(0.3)
+                await client.close()
+                await ws.close()
 
-#         websocket_server.add_handler(message_handler)
+        websocket_server.add_handler(message_handler)
 
-#         await client.listen()
+        caplog.set_level(logging.INFO)
+        await client.listen()
 
-#         assert client._failed_attempts == 1
+        assert "Unhandled msg: " in caplog.text
+        assert "unknown_type" in caplog.text
 
 # @pytest.mark.asyncio
 # async def test_websocket_invalid_msg_other_codes(websocket_server: FakeWebsocketServer) -> None:
@@ -744,3 +746,63 @@ async def test_websocket_heartbeat_trigger(websocket_server: FakeWebsocketServer
 #         await client.close()
 
 #         assert "Close websocket error" in caplog.text
+
+@pytest.mark.asyncio
+async def test_websocket_heartbeat_closed(websocket_server: FakeWebsocketServer, caplog) -> None:
+    """Test the client heartbeat.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session, heartbeat_interval=2)
+
+        caplog.set_level(logging.ERROR)
+        caplog.clear()
+
+        await client.ping()
+
+        assert "Cannot send ping" in caplog.text
+
+@pytest.mark.asyncio
+async def test_websocket_closed(websocket_server: FakeWebsocketServer) -> None:
+    """Test the client heartbeat.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session, heartbeat_interval=2)
+
+        await client.close()
+
+        assert True
+
+@pytest.mark.asyncio
+async def test_websocket_client_ignore_unhandled_exception(websocket_server: FakeWebsocketServer, caplog) -> None:
+    """Test the client ignored ws_client exception when close connection.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session)
+
+        client._watchdog.trigger = AsyncMock(side_effect=Exception("error"))
+
+        caplog.set_level(logging.WARNING)
+        caplog.clear()
+        await client.listen()
+
+        assert "Unexpected exception occurred" in caplog.text
+
+@pytest.mark.asyncio
+async def test_websocket_client_stopped_with_invaild_token_exception(websocket_server: FakeWebsocketServer, caplog) -> None:
+    """Test the client ignored ws_client exception when close connection.
+    """
+
+    async with aiohttp.ClientSession() as session:
+        client = get_client(websocket_server, session)
+
+        client._watchdog.trigger = AsyncMock(side_effect=InvalidTokenError("error"))
+
+        caplog.set_level(logging.WARNING)
+        caplog.clear()
+
+        with pytest.raises(InvalidAuthError):
+            await client.listen()
+            assert "Unexpected response received" in caplog.text

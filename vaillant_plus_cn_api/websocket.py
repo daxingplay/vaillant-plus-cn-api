@@ -181,17 +181,6 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                         else:
                             self._logger.info("Unhandled msg: %s", msg)
 
-                    elif message.type == aiohttp.WSMsgType.CLOSE:
-                        self._logger.warning("Websocket server closing: %s, %s", message.data, message.extra)
-                    elif message.type == aiohttp.WSMsgType.CLOSED:
-                        self._logger.warning(
-                            "Websocket connection closed")
-                        break
-
-                    elif message.type == aiohttp.WSMsgType.ERROR:
-                        self._logger.error("Websocket error")
-                        break
-
         except InvalidTokenError as error:
             self._state = STATE_STOPPED
             self._logger.warning("Websocket server auth failed: %s", error)
@@ -222,10 +211,6 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
                 self._logger.exception(
                     "Unexpected exception occurred: %s", error)
                 self._state = STATE_STOPPED
-        else:
-            if self.state != STATE_STOPPED:
-                self._state = STATE_DISCONNECTED
-                await asyncio.sleep(5)
 
     async def listen(self):
         """Start the listening websocket."""

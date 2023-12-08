@@ -476,3 +476,65 @@ async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer
             await api.control_device("1", "DHW_setpoint", 45.5)
 
     aresponses.assert_plan_strictly_followed()
+
+@pytest.mark.asyncio
+async def test_api_request_with_auth_header(aresponses: ResponsesMockServer) -> None:
+    """Test the API client request process with proper authorization header.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/auth/oauth/token",
+        "post",
+        aresponses.Response(
+            text=json.dumps({
+                "access_token": "123",
+                "active": True,
+                "client_id": "app-w",
+                "code": 200,
+                "expires_in": 2591999,
+                "giz_refresh_token": "giz_r_t1",
+                "giz_token": "giz_t1",
+                "giz_uid": "giz_u1",
+                "license": "made by iot",
+                "platform": 0,
+                "refresh_token": "r_t1",
+                "scope": "server",
+                "token_type": "bearer",
+                "user_id": "1",
+                "username": "u1"
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/app/device/control/1",
+        "post",
+        aresponses.Response(
+            text=json.dumps({
+                "code": 200,
+                "data": None,
+                "display": None,
+                "msg": "本次请求成功!"
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        token = await api.login(TEST_USERNAME, TEST_PASSWORD)
+        assert token.access_token == "123"
+        assert token.uid == "1"
+        assert token.username == TEST_USERNAME
+        assert token.password == TEST_PASSWORD
+        await api.control_device("1", "Test", 0)
+
+    aresponses.assert_plan_strictly_followed()
