@@ -91,12 +91,14 @@ class VaillantApiClient:
             async with session.request(method, f"{API_HOST}/{url}", **kwargs) as resp:
                 data = {}
                 if 399 < resp.status and 500 > resp.status:
+                    # Example error: Invalid auth. Status: 424. Content: {"code":9006,"msg":"token 过期","data":"Invalid token: xxxx"}
                     self._logger.warning("Invalid auth. Status: %s. Content: %s", resp.status, await resp.text())
                     raise InvalidAuthError
                 
                 if 200 == resp.status:
                     data = await resp.json(content_type=None)
                 else:
+                    self._logger.error("Request Error. Status: %s. Content: %s", resp.status, await resp.text())
                     resp.raise_for_status()
         except ClientError as err:
             raise RequestError(f"Error requesting data from {url}: {err}") from err
