@@ -173,7 +173,7 @@ class VaillantApiClient:
             for d in resp["data"][0]["allBindList"]
         ]
 
-    async def control_device(self, device_id: str, attr_name: str, value: Any):
+    async def control_device(self, device_id: str, attrs: dict[str, Any]):
         """Control device."""
         resp = await self._request(
             "post",
@@ -181,9 +181,7 @@ class VaillantApiClient:
             json={
                 "appKey": self._application_key,
                 "data": {
-                    "attrs": {
-                        f"{attr_name}": value
-                    }
+                    "attrs": attrs
                 },
                 "version": "1.0"
             }
