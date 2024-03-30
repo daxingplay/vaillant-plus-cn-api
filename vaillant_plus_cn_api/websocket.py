@@ -184,11 +184,11 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
         except InvalidTokenError as error:
             self._state = STATE_STOPPED
             self._logger.warning("Websocket server auth failed: %s", error)
-            raise InvalidAuthError
+            raise InvalidAuthError from error
         except aiohttp.ClientResponseError as error:
             if error.code == 401:
                 self._logger.error("Credentials rejected: %s", error)
-                raise InvalidAuthError
+                raise InvalidAuthError from error
             else:
                 self._logger.error("Unexpected response received: %s", error)
             self._state = STATE_STOPPED

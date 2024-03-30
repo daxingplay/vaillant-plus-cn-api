@@ -411,7 +411,9 @@ async def test_api_control_device(aresponses: ResponsesMockServer) -> None:
     async with aiohttp.ClientSession() as session:
         api = VaillantApiClient(session=session)
 
-        await api.control_device("1", "DHW_setpoint", 45.5)
+        await api.control_device("1", {
+            "DHW_setpoint": 45.5
+        })
 
     aresponses.assert_plan_strictly_followed()
 
@@ -442,7 +444,9 @@ async def test_api_control_device_auth_error(aresponses: ResponsesMockServer) ->
         api = VaillantApiClient(session=session)
 
         with pytest.raises(InvalidAuthError):
-            await api.control_device("1", "DHW_setpoint", 45.5)
+            await api.control_device("1", {
+                "DHW_setpoint": 45.5
+            })
     
     aresponses.assert_plan_strictly_followed()
 
@@ -473,7 +477,9 @@ async def test_api_get_device_info_request_error(aresponses: ResponsesMockServer
         api = VaillantApiClient(session=session)
 
         with pytest.raises(RequestError):
-            await api.control_device("1", "DHW_setpoint", 45.5)
+            await api.control_device("1", {
+                "DHW_setpoint": 45.5
+            })
 
     aresponses.assert_plan_strictly_followed()
 
@@ -535,6 +541,8 @@ async def test_api_request_with_auth_header(aresponses: ResponsesMockServer) -> 
         assert token.uid == "1"
         assert token.username == TEST_USERNAME
         assert token.password == TEST_PASSWORD
-        await api.control_device("1", "Test", 0)
+        await api.control_device("1", {
+            "Test": 0
+        })
 
     aresponses.assert_plan_strictly_followed()
