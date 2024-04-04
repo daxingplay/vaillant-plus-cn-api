@@ -9,7 +9,7 @@ homepage = "https://github.com/daxingplay/vaillant-plus-cn-api"
 
 [tool.poetry.dependencies]
 python = ">=3.9"
-aiohttp = "^3.8.0"
+aiohttp = ">=3.8.0"
 
 
 [tool.poetry.group.dev.dependencies]
