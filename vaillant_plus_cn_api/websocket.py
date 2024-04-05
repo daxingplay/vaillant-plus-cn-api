@@ -220,10 +220,10 @@ class VaillantWebsocketClient:  # pylint: disable=too-many-instance-attributes
 
     async def close(self):
         """Close the listening websocket."""
-        self._state = STATE_STOPPED
         self._watchdog.cancel()
         if self._ws_client is not None:
-            await self._ws_client.close()
+            await self._ws_client.close()        
+        self._state = STATE_STOPPED
 
     async def ping(self) -> None:
         """Send ping to server."""
