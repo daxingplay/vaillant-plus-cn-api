@@ -1,0 +1,89 @@
+# Publish the package to PyPI when a GitHub release is published.
+#
+# Authentication uses PyPI Trusted Publishing (OIDC), so no API token is
+# stored in this repository. One-time setup on PyPI, under
+# https://pypi.org/manage/project/vaillant-plus-cn-api/settings/publishing/ :
+#
+#   Owner:            daxingplay
+#   Repository name:  vaillant-plus-cn-api
+#   Workflow name:    publish.yaml
+#   Environment name: pypi
+#
+# To release: bump `version` in pyproject.toml, merge it, then publish a
+# GitHub release whose tag is the same version prefixed with `v`
+# (e.g. 2.0.1 -> v2.0.1). The build job refuses to publish if the two differ.
+
+name: Publish
+
+on:
+  release:
+    types: [published]
+  # Allows a dry run (build and check, never upload) from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'poetry'
+
+      - run: poetry install
+
+      - name: Run tests
+        run: poetry run pytest --cov
+
+      - name: Check the release tag matches the package version
+        if: github.event_name == 'release'
+        run: |
+          package_version="$(poetry version --short)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$package_version" != "$tag" ]; then
+            echo "::error::Release tag $GITHUB_REF_NAME does not match the version in pyproject.toml ($package_version). Bump the version, or retag the release."
+            exit 1
+          fi
+          echo "Publishing version $package_version"
+
+      - name: Build the distributions
+        run: poetry build
+
+      - name: Check the distributions
+        run: |
+          pipx run twine check dist/*
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    # Only a published release uploads; a manual run stops after the build.
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/vaillant-plus-cn-api
+    permissions:
+      # Required for trusted publishing; no PyPI token needed.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
