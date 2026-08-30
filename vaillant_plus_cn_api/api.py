@@ -151,27 +151,46 @@ class VaillantApiClient:
         )
         if resp.get("code") != 200:
             raise RequestError
-        return [
-            Device(
-                id=d.get("did"),
-                mac=d.get("mac"),
-                product_key=d.get("productKey"),
-                product_id=d.get("productId"),
-                product_name=d.get("productName"),
-                product_verbose_name=d.get("verboseName"),
-                is_online=d.get("isOnline") == 1,
-                is_manager=d.get("isManger") == 1,
-                group_id=d.get("groupId"),
-                sno=d.get("sno"),
-                create_time=d.get("ctime"),
-                last_offline_time=d.get("lastOfflineTime"),
-                model_alias=d["modelInfo"]["aliasName"],
-                model=d["modelInfo"]["model"],
-                serial_number=d["serialNumber"],
-                services_count=d["servicesCount"],
+
+        data = resp.get("data") or []
+        if len(data) == 0:
+            return []
+
+        bind_list = data[0].get("allBindList") or []
+
+        return [self._parse_device(d) for d in bind_list]
+
+    def _parse_device(self, d: dict[str, Any]) -> Device:
+        """Build a device from one entry of the bind list.
+
+        Devices the API has no model information for are returned with
+        `"modelInfo": null`; they are still bound to the account and must not
+        break the whole listing.
+        """
+        model_info = d.get("modelInfo") or {}
+        if not model_info:
+            self._logger.debug(
+                "Device %s has no model information: %s", d.get("did"), d
             )
-            for d in resp["data"][0]["allBindList"]
-        ]
+
+        return Device(
+            id=d.get("did"),
+            mac=d.get("mac"),
+            product_key=d.get("productKey"),
+            product_id=d.get("productId"),
+            product_name=d.get("productName"),
+            product_verbose_name=d.get("verboseName"),
+            is_online=d.get("isOnline") == 1,
+            is_manager=d.get("isManger") == 1,
+            group_id=d.get("groupId"),
+            sno=d.get("sno"),
+            create_time=d.get("ctime"),
+            last_offline_time=d.get("lastOfflineTime"),
+            model_alias=model_info.get("aliasName") or "",
+            model=model_info.get("model") or "",
+            serial_number=d.get("serialNumber") or "",
+            services_count=d.get("servicesCount") or 0,
+        )
 
     async def control_device(self, device_id: str, attrs: dict[str, Any]):
         """Control device."""

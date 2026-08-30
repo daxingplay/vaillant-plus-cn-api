@@ -26,9 +26,12 @@ class Device:
     group_id: int
     sno: str
     create_time: str
-    model_alias: str
-    model: str
-    serial_number: str
+    # Not every bound device carries model information: the API returns
+    # `"modelInfo": null` for device types it does not describe, e.g. an
+    # eloCIRC. Such devices must still be listable.
+    model_alias: str = ""
+    model: str = ""
+    serial_number: str = ""
     services_count: int = 0
     last_offline_time: str = ""
 
