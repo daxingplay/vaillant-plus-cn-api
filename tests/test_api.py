@@ -546,3 +546,119 @@ async def test_api_request_with_auth_header(aresponses: ResponsesMockServer) -> 
         })
 
     aresponses.assert_plan_strictly_followed()
+
+@pytest.mark.asyncio
+async def test_api_get_device_list_without_model_info(
+    aresponses: ResponsesMockServer,
+) -> None:
+    """Devices the API has no model information for must not break the listing.
+
+    The API returns `"modelInfo": null` for device types it does not describe,
+    e.g. an eloCIRC. Such a device used to raise
+    `TypeError: 'NoneType' object is not subscriptable`, which made every
+    account owning one unusable, including the supported devices in it.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
+        "get",
+        aresponses.Response(
+            text=json.dumps({
+                "code": 200,
+                "data": [
+                    {
+                        "allBindList": [
+                            {
+                                "did": "1",
+                                "mac": "12345678abcd",
+                                "productKey": "abcdefg",
+                                "productId": 3,
+                                "productName": "eloCIRC",
+                                "verboseName": "循环水魔方",
+                                "isOnline": 1,
+                                "isManger": 1,
+                                "groupId": 2,
+                                "sno": "8",
+                                "ctime": "1900-01-01 00:00:00",
+                                "lastOfflineTime": "2023-12-31 23:59:59",
+                                "modelInfo": None,
+                            },
+                            {
+                                "did": "2",
+                                "mac": "12345678abce",
+                                "productKey": "abcdefg",
+                                "productId": 3,
+                                "productName": "威精灵",
+                                "verboseName": "威能温控器",
+                                "isOnline": 1,
+                                "isManger": 1,
+                                "groupId": 2,
+                                "sno": "8",
+                                "ctime": "1900-01-01 00:00:00",
+                                "lastOfflineTime": "2023-12-31 23:59:59",
+                                "modelInfo": {
+                                    "aliasName": "两用炉",
+                                    "model": "model1",
+                                },
+                                "serialNumber": "6",
+                                "servicesCount": 7,
+                            },
+                        ],
+                    }
+                ],
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+        device_list = await api.get_device_list()
+
+    assert len(device_list) == 2
+
+    unsupported = device_list[0]
+    assert unsupported.id == "1"
+    assert unsupported.model_alias == ""
+    assert unsupported.model == ""
+    assert unsupported.serial_number == ""
+    assert unsupported.services_count == 0
+
+    supported = device_list[1]
+    assert supported.id == "2"
+    assert supported.model == "model1"
+    assert supported.serial_number == "6"
+
+    aresponses.assert_plan_strictly_followed()
+
+
+@pytest.mark.asyncio
+async def test_api_get_device_list_without_data(
+    aresponses: ResponsesMockServer,
+) -> None:
+    """An account without any bound device returns an empty list.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
+        "get",
+        aresponses.Response(
+            text=json.dumps({"code": 200, "data": []}),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        assert await api.get_device_list() == []
+
+    aresponses.assert_plan_strictly_followed()
