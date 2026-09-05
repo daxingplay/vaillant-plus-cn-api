@@ -34,6 +34,16 @@ class Device:
     serial_number: str = ""
     services_count: int = 0
     last_offline_time: str = ""
+    # Which product family the cloud puts this device in. Observed: 0 for the
+    # vSMART thermostat (productId 75), 1 for the familyCONNECT WiFi gateway
+    # (productId 81). Unlike `product_key` this is not per-SKU, so consumers
+    # can tell the families apart without maintaining a list of product keys.
+    platform: int | None = None
+    # The gateway carries its serial here and leaves `serial_number` empty;
+    # the vSMART does the opposite. Check both.
+    device_sn: str = ""
+    # Set when the device fronts other appliances, as a gateway does.
+    sub_product_key: str = ""
 
 @dataclass
 class Token:

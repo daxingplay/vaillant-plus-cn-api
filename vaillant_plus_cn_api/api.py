@@ -190,6 +190,9 @@ class VaillantApiClient:
             model=model_info.get("model") or "",
             serial_number=d.get("serialNumber") or "",
             services_count=d.get("servicesCount") or 0,
+            platform=d.get("platform"),
+            device_sn=d.get("deviceSn") or "",
+            sub_product_key=d.get("subProductKey") or "",
         )
 
     async def control_device(self, device_id: str, attrs: dict[str, Any]):

@@ -309,6 +309,7 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
                                     "aliasName": "两用炉",
                                     "model": "model1"
                                 },
+                                "platform": 0,
                                 "productId": 3,
                                 "productKey": "abcdefg",
                                 "productName": "威精灵",
@@ -381,8 +382,91 @@ async def test_api_get_device_list(aresponses: ResponsesMockServer) -> None:
         assert devices[0].mac == "12345678abcd"
         assert devices[0].product_key == "abcdefg"
         assert devices[0].is_online == True
+        # A vSMART is platform 0, as against the gateway's 1.
+        assert devices[0].platform == 0
 
     aresponses.assert_plan_strictly_followed()
+
+
+@pytest.mark.asyncio
+async def test_api_get_device_list_gateway(aresponses: ResponsesMockServer) -> None:
+    """A familyCONNECT gateway parses with the fields that identify its family.
+
+    The entry below is the shape a real gateway returns: `platform` 1 rather
+    than 0, its serial in `deviceSn` with `serialNumber` left empty, a
+    `subProductKey` for the appliances behind it, and no `modelInfo` at all.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
+        "get",
+        aresponses.Response(
+            text=json.dumps({
+                "code": 200,
+                "data": [
+                    {
+                        "allBindList": [
+                            {
+                                "ctime": "1900-01-01 00:00:00",
+                                "devAlias": "\u58c1\u6302\u7089",
+                                "devLabel": None,
+                                "deviceSn": "21254300100488060976033764N7",
+                                "did": "gw1",
+                                "isManger": 1,
+                                "isOnline": 1,
+                                "lastOfflineTime": None,
+                                "mac": "206ef1dfc6ec",
+                                "modelInfo": None,
+                                "platform": 1,
+                                "productId": 81,
+                                "productKey": "dab9eda3bec64b9b8a76508b2f5a3e3a",
+                                "productName": "\u667a\u80fd\u7f51\u5173",
+                                "serialNumber": "",
+                                "servicesCount": 0,
+                                "sno": "90965336777646038926",
+                                "subProductKey": "f133295f1c569096fec70c47c623dcfc",
+                                "verboseName": "WiFiGateway"
+                            }
+                        ],
+                        "deviceCount": 1,
+                        "groupCount": 1,
+                        "groupList": [],
+                        "id": 9,
+                        "shareBindList": []
+                    }
+                ],
+                "msg": "\u672c\u6b21\u8bf7\u6c42\u6210\u529f!"
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        devices = await api.get_device_list()
+        assert len(devices) == 1
+        device = devices[0]
+
+        # The family discriminator, which is what callers should branch on.
+        assert device.platform == 1
+        assert device.product_id == 81
+        assert device.product_verbose_name == "WiFiGateway"
+
+        # A gateway keeps its serial in deviceSn and leaves serialNumber blank.
+        assert device.device_sn == "21254300100488060976033764N7"
+        assert device.serial_number == ""
+
+        # It fronts other appliances.
+        assert device.sub_product_key == "f133295f1c569096fec70c47c623dcfc"
+
+        # No model information, which must not break parsing (see #27/#28).
+        assert device.model == ""
+        assert device.model_alias == ""
 
 
 @pytest.mark.asyncio
