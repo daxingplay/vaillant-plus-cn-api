@@ -44,6 +44,10 @@ class Device:
     device_sn: str = ""
     # Set when the device fronts other appliances, as a gateway does.
     sub_product_key: str = ""
+    # The name the user gave this device in the app - "壁挂炉" for a boiler,
+    # "威精灵" for a thermostat. Unlike `product_name` it is chosen by the
+    # owner, so it is the name they expect to see.
+    dev_alias: str = ""
 
 @dataclass
 class Token:

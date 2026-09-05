@@ -156,9 +156,26 @@ class VaillantApiClient:
         if len(data) == 0:
             return []
 
-        bind_list = data[0].get("allBindList") or []
+        # `data` is a list of homes, not a wrapper around one. Reading only
+        # data[0] made every device in a second home invisible, with no error
+        # to explain why. `shareBindList` holds devices another account shared
+        # into this home, which were dropped for the same reason.
+        devices: list[Device] = []
+        seen: set[str] = set()
+        for home in data:
+            if not isinstance(home, dict):
+                continue
+            for key in ("allBindList", "shareBindList"):
+                for entry in home.get(key) or []:
+                    device_id = entry.get("did")
+                    # A device can appear in more than one home's list; keep
+                    # the first, so the result has one entry per did.
+                    if device_id is None or device_id in seen:
+                        continue
+                    seen.add(device_id)
+                    devices.append(self._parse_device(entry))
 
-        return [self._parse_device(d) for d in bind_list]
+        return devices
 
     def _parse_device(self, d: dict[str, Any]) -> Device:
         """Build a device from one entry of the bind list.
@@ -188,6 +205,7 @@ class VaillantApiClient:
             last_offline_time=d.get("lastOfflineTime"),
             model_alias=model_info.get("aliasName") or "",
             model=model_info.get("model") or "",
+            dev_alias=d.get("devAlias") or "",
             serial_number=d.get("serialNumber") or "",
             services_count=d.get("servicesCount") or 0,
             platform=d.get("platform"),
