@@ -469,6 +469,87 @@ async def test_api_get_device_list_gateway(aresponses: ResponsesMockServer) -> N
         assert device.model_alias == ""
 
 
+def _bind_entry(did: str, **overrides) -> dict:
+    """One entry of a bind list, with only the fields the parser reads."""
+    entry = {
+        "ctime": "1900-01-01 00:00:00",
+        "devAlias": "壁挂炉",
+        "deviceSn": None,
+        "did": did,
+        "isManger": 1,
+        "isOnline": 1,
+        "mac": f"mac{did}",
+        "modelInfo": None,
+        "platform": 0,
+        "productId": 3,
+        "productKey": "pk",
+        "productName": "n",
+        "serialNumber": "",
+        "servicesCount": 0,
+        "sno": "s",
+        "verboseName": "v",
+    }
+    entry.update(overrides)
+    return entry
+
+
+@pytest.mark.asyncio
+async def test_api_get_device_list_spans_homes_and_shares(
+    aresponses: ResponsesMockServer,
+) -> None:
+    """Every home is read, shared devices included, each did returned once.
+
+    `data` is a list of homes, not a wrapper around one. Reading only
+    `data[0]["allBindList"]` hid every device in a second home and every
+    device shared from another account, with no error to explain the absence.
+
+    Args:
+        aresponses: An aresponses server.
+    """
+    aresponses.add(
+        API_HOST.removeprefix("https://"),
+        "/app/device/getBindList",
+        "get",
+        aresponses.Response(
+            text=json.dumps({
+                "code": 200,
+                "data": [
+                    {
+                        "id": 1,
+                        "allBindList": [_bind_entry("1")],
+                        "shareBindList": [_bind_entry("2", devAlias="共享炉")],
+                    },
+                    # A second home. All of this was invisible before.
+                    {
+                        "id": 2,
+                        # did 1 is bound in both homes.
+                        "allBindList": [_bind_entry("3"), _bind_entry("1")],
+                        "shareBindList": [],
+                    },
+                    # The cloud has been seen returning nulls in these slots.
+                    {"id": 3, "allBindList": None, "shareBindList": None},
+                ],
+            }),
+            content_type="application/json",
+            status=200,
+        ),
+    )
+
+    async with aiohttp.ClientSession() as session:
+        api = VaillantApiClient(session=session)
+
+        devices = await api.get_device_list()
+
+        # Devices from both homes, the share included, and did 1 only once.
+        assert [d.id for d in devices] == ["1", "2", "3"]
+
+        # A share is a real device, not a stub.
+        assert devices[1].dev_alias == "共享炉"
+
+        # The name the owner gave the device in the app.
+        assert devices[0].dev_alias == "壁挂炉"
+
+
 @pytest.mark.asyncio
 async def test_api_control_device(aresponses: ResponsesMockServer) -> None:
     """Test the API client control device method.
