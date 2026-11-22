@@ -11,8 +11,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # One version failing must not cancel the others' results.
+      fail-fast: false
       matrix:
-        python-version: [3.9, "3.10", 3.11]
+        # GitHub's Ubuntu 26.04 runners no longer provide Python 3.9, so it
+        # cannot be tested here even though the package still declares it.
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v3
       - name: Install poetry
