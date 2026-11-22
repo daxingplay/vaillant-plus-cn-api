@@ -692,7 +692,7 @@ async def test_websocket_heartbeat(websocket_server: FakeWebsocketServer) -> Non
         assert actual["pinged"] is True
 
 @pytest.mark.asyncio
-async def test_websocket_heartbeat_trigger(websocket_server: FakeWebsocketServer, event_loop: asyncio.AbstractEventLoop) -> None:
+async def test_websocket_heartbeat_trigger(websocket_server: FakeWebsocketServer) -> None:
     """Test the client can trigger another heartbeat when received pong from server.
     """
 
@@ -721,7 +721,7 @@ async def test_websocket_heartbeat_trigger(websocket_server: FakeWebsocketServer
 
         websocket_server.add_handler(message_handler)
 
-        event_loop.call_later(
+        asyncio.get_running_loop().call_later(
           4.3,
           lambda: asyncio.create_task(client.close())
         )
