@@ -1,5 +1,6 @@
 """Configurations for test cases."""
 
+import asyncio
 import json
 from aiohttp import web, WSMsgType
 from aiohttp.test_utils import BaseTestServer
@@ -66,6 +67,8 @@ class FakeWebsocketServer(BaseTestServer):
 
 
 @asyncio_fixture(scope="function")
-async def websocket_server(event_loop):
-    async with FakeWebsocketServer(loop=event_loop) as server:
+async def websocket_server():
+    # pytest-asyncio 1.0 removed the `event_loop` fixture; the loop running
+    # this fixture is the one the test runs on.
+    async with FakeWebsocketServer(loop=asyncio.get_running_loop()) as server:
         yield server
